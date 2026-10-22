@@ -62,6 +62,7 @@ packages = ["src/glacierview"]
 
 [dependency-groups]
 dev = [
+    "ipykernel>=7.3.0",
     "ruff>=0.16.8",
 ]
 # Needed to run the notebooks; not needed to run train.py / final_areas.py.

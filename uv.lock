@@ -1146,6 +1146,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "ipykernel" },
     { name = "ruff" },
 ]
 notebook = [
@@ -1184,7 +1185,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.16.8" }]
+dev = [
+    { name = "ipykernel", specifier = ">=7.3.0" },
+    { name = "ruff", specifier = ">=0.16.8" },
+]
 notebook = [
     { name = "ipykernel", specifier = ">=6.29" },
     { name = "ipywidgets", specifier = ">=8.1" },

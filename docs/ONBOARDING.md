@@ -302,8 +302,8 @@ it down to a workable set. The actual filters, read off the notebook:
 - **exclude** these `geog_area` values: `Svalbard, Jan Mayen, and Bouvet`,
   `Various (GlobGlacier)`, the `Randolph Glacier Inventory; Umbrella RC…` bucket,
   `Antarctic Peninsula`, `Various (NSIDC)`
-- **`db_area` between 1 and 50 km²** — nothing too small to resolve at 30 m, nothing so large it
-  won't fit a manageable image
+- **`db_area` between 1 and 50 km²** — a judgement call to keep typical glaciers: nothing tiny,
+  nothing unusually large
 - **de-duplicate `glac_id`** — GLIMS sometimes has several outlines for one glacier; keep the first
 
 What survives is ~18,000 glaciers, hence "18k" in filenames.

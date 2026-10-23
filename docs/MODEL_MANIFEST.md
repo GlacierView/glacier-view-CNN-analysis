@@ -2,8 +2,10 @@
 
 Generated 2026-09-19. Records what each checkpoint is, because nothing else on disk does.
 
-**None of these files is in git** (`.gitignore` excludes `src/segmentation/saved_models/`)
-**and none is in S3.** They exist only on this machine. See `docs/ONBOARDING.md` Part 8.
+**None of these files is in git** (`.gitignore` excludes `src/segmentation/saved_models/`).
+All of them were backed up on 2026-09-19 to `s3://segmentation-model-gv/checkpoints/` (us-east-1).
+The production checkpoint is also published, converted to safetensors, at
+<https://huggingface.co/GlacierView/glacierview-unet>. See "Published copy" below.
 
 ## PyTorch checkpoints
 
@@ -26,7 +28,9 @@ Saved with `torch.save(model)` — a **pickled module referencing `__main__.UNet
 - size: 343,522,287 bytes
 - sha256: `9c29c41515bde39c1722c5bd18f5e82711fb54c86cd5f53d5262d9348623c2b8`
 - input channels: 9
-- Production checkpoint. The paper's reported model (Dice 0.92) is believed to be this one — UNCONFIRMED.
+- Production checkpoint and the paper's model, confirmed by the project lead and empirically
+  (Dice 0.8681 vs the 2023 checkpoint's 0.8261 on the same 359 images; the paper's 0.92 does
+  not reproduce).
 
 ### `saved_models/model`
 
@@ -135,3 +139,17 @@ Three candidate explanations, not distinguished:
 2. Neither has recorded per-region metrics, training duration, or the exact training-set snapshot.
 
 Ask Somansh Budhwar or Armin Schwartzman (armins@ucsd.edu).
+
+## Published copy
+
+`unet_summer_model_unfrozen_100` converted with `glacierview.models.export_pretrained`:
+
+- repo: `GlacierView/glacierview-unet` (**private**), tag `v1-paper` → commit `7a00d6d`. Loading it
+  needs `hf auth login` (or `HF_TOKEN` on a server) with read access to the GlacierView org.
+- files: `model.safetensors` (weights only, no pickle), `config.json`, `README.md` (model card)
+- `model.safetensors` sha256: `d9a878aa8b028c90d2859f28ab5ca4a495cf4089ab81df15f694a534b54c9e4e`
+- verified 2026-10-23: every tensor equal to the pickle's; outputs bit-identical on random and real
+  inputs; `glacierview infer` on Trient gives byte-identical results from both, including when
+  downloaded from the Hub as `GlacierView/glacierview-unet@v1-paper`.
+
+Load with `load_checkpoint("GlacierView/glacierview-unet")` or `UNet.from_pretrained(...)`.

@@ -26,10 +26,15 @@ are derived from the raw bands and prepended by the caller.
 import torch
 import torch.nn as nn
 import torchvision.models as models
+from huggingface_hub import PyTorchModelHubMixin
 
 #: Number of input channels the model expects. Both released checkpoints were
 #: trained at 9; verified against their serialized tensors.
 IN_CHANNELS = 9
+
+#: Where the published weights live. Load with ``UNet.from_pretrained(HF_REPO_ID)``
+#: or pass the id to `load_checkpoint`.
+HF_REPO_ID = "GlacierView/glacierview-unet"
 
 
 class conv_block(nn.Module):
@@ -49,23 +54,35 @@ class conv_block(nn.Module):
         return x
 
 
-class UNet(nn.Module):
+class UNet(
+    nn.Module,
+    PyTorchModelHubMixin,
+    library_name="glacierview",
+    repo_url="https://github.com/GlacierView/glacier-view-analysis",
+    license="apache-2.0",
+    tags=["image-segmentation", "remote-sensing", "landsat", "glaciers"],
+):
     """ResNet-50-encoder U-Net producing a 2-class segmentation map.
 
     Args:
         n_class: number of output classes (2: background, glacier).
         freeze_encoder: if True, hold the pretrained ResNet weights fixed and
             train only the replaced stem and the decoder.
+        pretrained_encoder: if True, start the encoder from ImageNet weights,
+            which downloads them. Pass False when the weights are about to be
+            overwritten by a checkpoint; `from_pretrained` does this via the
+            published config.
     """
 
-    def __init__(self, n_class=2, freeze_encoder=True):
+    def __init__(self, n_class: int = 2, freeze_encoder: bool = True,
+                 pretrained_encoder: bool = True):
         super().__init__()
         self.n_class = n_class
         self.freeze_encoder = freeze_encoder
 
-        # ImageNet-pretrained ResNet-50 with its classifier head (the final
-        # avgpool and fc layers) removed, leaving eight sequential stages.
-        resnet = models.resnet50(weights='ResNet50_Weights.DEFAULT')
+        # ResNet-50 with its classifier head (the final avgpool and fc layers)
+        # removed, leaving eight sequential stages.
+        resnet = models.resnet50(weights='ResNet50_Weights.DEFAULT' if pretrained_encoder else None)
         if freeze_encoder:
             # Skip index 0: the stem is replaced below and must stay trainable.
             for i, param in enumerate(resnet.parameters()):

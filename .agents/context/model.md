@@ -42,7 +42,10 @@ needs the same names injected first. Consequences:
 - Edit `UNet`/`conv_block` and old checkpoints may stop loading.
 - `torch.load("model")` is **cwd-relative** in both scripts and no file named `model` exists — copy
   or symlink a checkpoint first.
-- Converting to a `state_dict` is what makes these portable; do that before sharing them anywhere.
+- Converting to a `state_dict` is what makes these portable. The production checkpoint has been
+  converted and uploaded as safetensors to `GlacierView/glacierview-unet` on Hugging Face;
+  `load_checkpoint` accepts that repo id (optionally `@v1-paper`) as well as a file path. The repo is
+  private: loading needs `hf auth login` or `HF_TOKEN`.
 
 ### Other invariants
 

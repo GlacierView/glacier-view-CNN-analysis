@@ -105,7 +105,7 @@ notebooks/
 sql/                    Athena queries
 data/analysis/          committed reference CSVs
 data/sample/training/   a 32-pair training fixture
-data/sample/inference/  every Trient scene + DEM, for inference with no download
+data/sample/inference/  every Trient scene, plus 1 scene/DEM/mask for 100 more glaciers
 docs/                   onboarding guide, design doc, model manifest
 .agents/                agent-facing rules, context, skills, references
 ```

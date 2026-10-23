@@ -41,7 +41,9 @@ GV_DATA_ROOT=data/sample/inference uv run glacierview infer --glims-id G007026E4
   --checkpoint GlacierView/glacierview-unet --out-dir /tmp/trient
 ```
 
-Expect `1748 scenes, 7.49 -> 6.31 km^2`. Always pass `--out-dir` here.
+Expect `1748 scenes, 7.49 -> 6.31 km^2`. Always pass `--out-dir` here. The same root holds one
+training scene, DEM and GLIMS mask for 100 more glaciers (`data/sample/inference/glaciers.csv`).
+They're training images, so scoring against the masks checks plumbing, not accuracy.
 
 For any other glacier, the landing zone's `landsat/` directory is empty locally. Pull one
 glacier (Trient's is ~700 MB):

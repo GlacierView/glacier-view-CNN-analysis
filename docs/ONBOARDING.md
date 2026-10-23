@@ -604,7 +604,7 @@ the *product* of downloading what this query chose.
 |---|---|
 | `analysis/` | Four committed CSVs the analysis notebook reads. See Part 8. |
 | `sample/training/` | 32 image/mask pairs, so `glacierview train` can be smoke tested with no download. |
-| `sample/inference/` | Every Trient scene (1,748, ~708 MB) plus its DEM, laid out like the data root, so `GV_DATA_ROOT=data/sample/inference glacierview infer` runs with no download. |
+| `sample/inference/` | Every Trient scene (1,748, ~708 MB) plus its DEM, and one training scene + DEM + GLIMS mask for 100 more glaciers (20 per region, `glaciers.csv`), laid out like the data root so `GV_DATA_ROOT=data/sample/inference glacierview infer` runs with no download. See its README. |
 | `glims_18k.parquet` | The glacier table Athena reads. |
 
 ### Elsewhere
@@ -967,7 +967,7 @@ reproducing its exact numbers needs the pre-refactor script from git history.
   to smoke test training with no download.
 - **An inference fixture** — `data/sample/inference`, every Trient scene plus its DEM,
   committed. `GV_DATA_ROOT=data/sample/inference` runs Trient end to end (1,748 scenes,
-  7.49 → 6.31 km²).
+  7.49 → 6.31 km²). It also holds one scene, DEM and mask for 100 more glaciers.
 - **Inference DEMs** — all 1,122, matching the bucket's ID set exactly.
 - **Inference metadata** — the four table CSVs plus `filtered_inference_data.csv`.
 - **Analysis inputs** — the four CSVs in `data/analysis/`:

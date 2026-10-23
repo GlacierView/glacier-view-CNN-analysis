@@ -40,13 +40,13 @@ Before you begin, ensure you have the following prerequisites:
 1. Clone this repository to your local machine:
 
 ```bash
-git clone https://github.com/mattwaismann/glacier-view-analysis.git
+git clone https://github.com/GlacierView/glacier-view-CNN-analysis.git
 ```
 
 2. Navigate to the project directory:
 
 ```bash
-cd glacier-view-analysis
+cd glacier-view-CNN-analysis
 ```
 
 3. Install the dependencies with [uv](https://docs.astral.sh/uv/):

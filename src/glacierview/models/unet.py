@@ -58,7 +58,7 @@ class UNet(
     nn.Module,
     PyTorchModelHubMixin,
     library_name="glacierview",
-    repo_url="https://github.com/GlacierView/glacier-view-analysis",
+    repo_url="https://github.com/GlacierView/glacier-view-CNN-analysis",
     license="apache-2.0",
     tags=["image-segmentation", "remote-sensing", "landsat", "glaciers"],
 ):

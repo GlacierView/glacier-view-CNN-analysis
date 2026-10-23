@@ -8,7 +8,7 @@ https://developers.google.com/earth-engine/guides/ic_filtering
 
 ### Glacier Inference Selection
 
-The selection for inference is determined by following SQL query [identify_inference_glims_ids_geog_area_rollup_50.sql](https://github.com/mattwaismann/glacier-view-analysis/blob/main/src/sql/identify_inference_glims_ids_geog_area_rollup_50.sql)  which runs over our AWS Athena metadata database. 
+The selection for inference is determined by following SQL query [identify_inference_glims_ids_geog_area_rollup_50.sql](https://github.com/GlacierView/glacier-view-CNN-analysis/blob/main/sql/identify_inference_glims_ids_geog_area_rollup_50.sql)  which runs over our AWS Athena metadata database. 
 
 This query works by scanning over all of our **training data** metadata for GLIMS IDs that have at least one file with cloud_cover < 10, image_quality = 9, more than 50,000 pixels, 0 no data pixels, less than 10% zero pixels, and have geographic area that’s not Canada (since those glaciers all appear on Ellesmere Island and are too far north for DEMs), and has an image in a low snow month (all of them do). Then we will take 50 GLIMS IDs per our 5 geographic area rollups based on db_area.
 

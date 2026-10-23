@@ -33,8 +33,18 @@ the run. The exit code is non-zero if anything failed.
 
 ## Getting the imagery first
 
-The landing zone's `landsat/` directory is empty locally. Start with one
-glacier (~700 MB):
+Trient needs no download: every scene and its DEM are committed under
+`data/sample/inference`, laid out like the data root.
+
+```bash
+GV_DATA_ROOT=data/sample/inference uv run glacierview infer --glims-id G007026E45991N \
+  --checkpoint GlacierView/glacierview-unet --out-dir /tmp/trient
+```
+
+Expect `1748 scenes, 7.49 -> 6.31 km^2`. Always pass `--out-dir` here.
+
+For any other glacier, the landing zone's `landsat/` directory is empty locally. Pull one
+glacier (Trient's is ~700 MB):
 
 ```bash
 aws s3 cp s3://full-time-series-images-t1-l2-sr/G007026E45991N/ \

@@ -126,29 +126,5 @@ select = [
 known-first-party = ["glacierview"]
 
 [tool.ruff.lint.per-file-ignores]
-# Notebooks are exploratory and have their own idioms. These rules fire on
-# things that are normal in a notebook rather than on defects:
-#   F821 - names defined in a cell that was later edited or deleted
-#   F811 - redefining a name while iterating in a later cell
-#   B018 - a bare expression on the last line is how you display a value
-#   E402 - imports after code, as cells get reordered
-#   F401 - imports kept around for interactive use
-#   E501 - long lines in scratch cells
-#   SIM115 - open() without a context manager while poking at a file
-#
-# The rest below are real findings that were left alone on purpose, because
-# "fixing" them in a notebook is riskier than leaving them:
-#   B007, F841 - a loop variable or assignment that looks unused in its own
-#          cell may well be read by a later cell, since notebook cells share
-#          one namespace. Renaming or deleting it can break the notebook.
-#   SIM105 - wants contextlib.suppress, which means injecting an import into
-#          a cell. `except Exception: pass` reads fine as-is.
-#   B905  - zip(strict=True) turns a silent truncation into an exception.
-#          That is the right default in new code (and is used in src/*.py),
-#          but changing it here alters behaviour on data not inspected.
-#   SIM113 - swapping a hand-rolled counter for enumerate() is a restructure,
-#          and the counter's value after the loop may be used downstream.
-"*.ipynb" = [
-    "F821", "F811", "B018", "E402", "F401", "E501", "SIM115",
-    "B007", "F841", "SIM105", "B905", "SIM113",
-]
+# A bare expression on a cell's last line is how a notebook displays a value.
+"*.ipynb" = ["B018"]

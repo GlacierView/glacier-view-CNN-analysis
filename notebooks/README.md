@@ -1,77 +1,79 @@
 # Notebooks
 
-Notebooks are for work that genuinely benefits from cell-by-cell iteration.
-Anything that runs the same way every time lives in the `glacierview` package
-and is driven from the CLI instead — see `glacierview --help`.
+Notebooks are thin drivers: each one sets a few parameters, calls the `glacierview` package, and
+shows or writes the result. The logic lives in the package, where it can be imported, reused and
+checked. Anything that runs the same way every time is a CLI command instead; see
+`glacierview --help`.
 
-All of these import the installed package, so run `uv sync` first and start
-Jupyter from anywhere:
+They import the installed package, so run `uv sync` first and start Jupyter from anywhere:
 
 ```bash
 uv run jupyter lab
 ```
 
-None of them manipulate `sys.path` or hardcode a home directory any more;
-paths come from `glacierview.config`, which is environment-overridable.
+Paths come from `glacierview.config` and are environment-overridable: start Jupyter with
+`GV_DATA_ROOT` set to work off an external disk, or off the committed sample.
+
+Each notebook opens with a header: its purpose, its inputs (files and non-code dependencies), its
+outputs, and any manual step afterwards.
 
 ## `pipeline/`
 
-Numbered because order matters — these produce the datasets everything else
-consumes. They are kept as notebooks because each step is run rarely, is
-inspected as it goes, and involves judgement calls about what to keep.
+Numbered because order matters: these produce the datasets everything else consumes. They stay
+notebooks because each step runs rarely and is inspected as it goes.
 
-| Notebook | What it does |
-|---|---|
-| `01_glims_select_glaciers.ipynb` | Filters the GLIMS inventory to 18,093 glaciers and computes the bounding boxes Earth Engine is queried with. |
-| `02_glims_to_parquet.ipynb` | Adds `geog_area_rollup`, drops geometry, writes the Parquet that Athena reads. |
-| `03_ee_pull_training.ipynb` | Downloads one temporal composite per glacier for training. |
-| `04_ee_pull_dems.ipynb` | Downloads one NASADEM per glacier. |
-| `05_ee_pull_time_series.ipynb` | Downloads the full 1984-present series for the inference set. |
-| `06_metadata_training.ipynb` | Relationalises the training pull's logs and metadata into CSVs. |
-| `07_metadata_time_series.ipynb` | The same for the inference pull. These CSVs become the Athena tables. |
-| `08_inventory_downloads.ipynb` | Inventories what actually landed on disk. |
-| `09_build_masks.ipynb` | Rasterises GLIMS polygons into masks, reprojecting per image CRS. |
-| `10_build_training_set.ipynb` | Pairs images with masks into the `images/` + `masks/` training set. |
+| Notebook | What it does | Package code |
+|---|---|---|
+| `01_glims_select_glaciers.ipynb` | Filters GLIMS to 18,093 glaciers and adds the bounding boxes Earth Engine is queried with. | `glims` |
+| `02_glims_to_parquet.ipynb` | Adds `geog_area_rollup`, drops geometry, writes `data/glims_18k.parquet` for Athena. | `glims` |
+| `03_ee_pull_training.ipynb` | Downloads the scenes within ±50 days of each glacier's GLIMS outline, for training. | `earthengine` |
+| `04_ee_pull_dems.ipynb` | Downloads one NASADEM per glacier, for inference or training. | `earthengine` |
+| `05_ee_pull_time_series.ipynb` | Downloads the full 1984-present series for the inference set. | `earthengine` |
+| `06_metadata_training.ipynb` | Turns the training pull into the CSVs behind the Athena tables. | `metadata` |
+| `07_metadata_time_series.ipynb` | The same for the inference pull. | `metadata` |
+| `08_inventory_downloads.ipynb` | Lists what actually landed on disk. | — |
+| `09_build_masks.ipynb` | Rasterises GLIMS outlines into masks, reprojected into each scene's CRS. | `training.build` |
+| `10_build_training_set.ipynb` | Pairs scenes, DEMs and masks into the `images/` + `masks/` training set. | `training.build` |
 
-The Earth Engine steps use `glacierview.earthengine.EePull`; the raster steps
-use `glacierview.rasters` and `glacierview.preprocess`. The notebooks are
-drivers, not implementations.
+The Earth Engine notebooks (03–05) need an Earth Engine sign-in; the rest run offline on local data.
+All the pulls resume: glaciers already on disk are skipped.
 
 ## `exploration/`
 
-Sandboxes. Not expected to run top to bottom, and some depend on cells that
-were edited away — that is what they are for.
-
 | Notebook | What it does |
 |---|---|
-| `glims_inventory.ipynb` | Region and size distributions across GLIMS. |
-| `landsat_metadata.ipynb` | Where the cloud-cover and zero-pixel thresholds came from. |
-| `band_distributions.ipynb` | Per-band pixel-value distributions. |
-| `preprocessing_sandbox.ipynb` | Scratch space for the preprocessing functions. |
-| `inspect_training_data.ipynb` | Visual QA of the built training set. Run this first to see what the data looks like. |
-| `reprojection.ipynb` | CRS reprojection experiments. |
+| `glims_inventory.ipynb` | Region counts and maps for the selected, trained-on and inference glaciers. |
+| `landsat_metadata.ipynb` | Where the cloud-cover, zero-pixel and pixel-count thresholds came from. |
+| `band_distributions.ipynb` | Per-scene band minima and maxima across Landsat 8. |
+| `preprocessing_sandbox.ipynb` | Scenes before and after preprocessing, band by band. |
+
+`band_distributions` and `preprocessing_sandbox` take `USE_SAMPLE = True` to run on the committed
+sample (`data/sample/inference`) instead of the full landing zone.
 
 ## `analysis/`
 
 | Notebook | What it does |
 |---|---|
-| `regional_decline.ipynb` | The published analysis. Compares predicted areas against GLIMS `db_area` by region via log-linear regression plus two bootstraps, and produces the per-region regression figures. Reads `data/analysis/`. |
+| `regional_decline.ipynb` | The published analysis. Estimates each region's decline from the 1,085-glacier area series, as a bootstrapped log-linear trend and as a weighted mean of per-glacier slopes. Reads `data/analysis/`. |
 
-This supersedes `areas_true_vs_predicted.ipynb`, which read the older
-245-glacier CSV and is a functional subset of it (see git history).
+It reproduces the published numbers exactly, including two quirks of the original code that are
+kept behind flags:
+- **Two glaciers were dropped** (Trient and `G007045E45994N`) by a positional slice, which is why the
+  paper reports 1,083 glaciers.
+- **The slope weights are inverted:** each glacier is weighted by the share of years *missing*, so
+  glaciers with more data count less. Corrected, North America's decline goes from the slowest to in
+  line with Asia; see `.agents/context/state.md`.
 
-**Two things to know before trusting its output.** It filters to glaciers whose
-predicted area is within 8% of the GLIMS training area
-(`rel_error_train < rel_error`, default 8) — a quality gate the paper does not
-mention. And its bootstrap weights each glacier by
-`(total_rows - n_observations) / total_rows`, which is the proportion of data
-*missing*, so glaciers with **more** data get **less** weight. That is the
-opposite of the stated intent and it materially changes the regional ordering;
-see `.agents/context/state.md`.
+The original also computed each glacier's error against its GLIMS area but never used it to filter
+anything; the rewrite keeps the error as a diagnostic. Oceania's 35 glaciers aren't in the paper's
+five regions and are left out.
 
 ## Not here any more
 
-`glacier_segmentation-updated.ipynb`, `test_saved_model_matt.ipynb` and
-`test_saved_model_somansh.ipynb` were removed: training is now
-`glacierview train` and single-glacier inference is `glacierview infer`.
-`get_s3_data.ipynb` did what `aws s3 cp` does. See git history.
+- `inspect_training_data.ipynb`: its inspection cells are now the end of notebook 10.
+- `reprojection.ipynb`: one-off reprojection of an old, non-existent data layout.
+- `glacier_segmentation-updated.ipynb`, `test_saved_model_*.ipynb`: training is
+  `glacierview train`, single-glacier inference is `glacierview infer`.
+- `get_s3_data.ipynb`: did what `aws s3 cp` does.
+
+See git history for any of them.

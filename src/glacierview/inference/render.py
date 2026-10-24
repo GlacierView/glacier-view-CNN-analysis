@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+from contextlib import nullcontext
 from pathlib import Path
 
 import imageio.v2 as imageio
@@ -55,8 +55,8 @@ def write_gif(
 
     gif_path.parent.mkdir(parents=True, exist_ok=True)
     with imageio.get_writer(gif_path, mode="I") as writer:
-        for frame in sorted(os.listdir(scratch_dir)):
-            writer.append_data(imageio.imread(scratch_dir / frame))
+        for frame in sorted(scratch_dir.iterdir()):
+            writer.append_data(imageio.imread(frame))
     logger.info("wrote %s", gif_path)
     return gif_path
 
@@ -64,7 +64,7 @@ def write_gif(
 def plot_area_series(out_path: Path, dates, areas, title: str) -> Path:
     """Plot a km^2 time series using the project's shared style."""
     style = config.mpl_style()
-    with plt.style.context(str(style)) if style.exists() else _null_context():
+    with plt.style.context(str(style)) if style.exists() else nullcontext():
         fig, ax = plt.subplots()
         ax.plot(dates, areas)
         ax.set_title(title)
@@ -75,10 +75,3 @@ def plot_area_series(out_path: Path, dates, areas, title: str) -> Path:
     logger.info("wrote %s", out_path)
     return out_path
 
-
-class _null_context:
-    def __enter__(self):
-        return None
-
-    def __exit__(self, *exc):
-        return False

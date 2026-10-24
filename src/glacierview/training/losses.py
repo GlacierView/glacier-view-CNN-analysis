@@ -10,7 +10,6 @@ implementation; the original script credited it only as "source".
 
 from __future__ import annotations
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -18,10 +17,7 @@ import torch.nn.functional as F
 
 def make_one_hot(labels: torch.Tensor, num_classes: int) -> torch.Tensor:
     """Convert a class-index tensor [N, 1, *] to one-hot [N, num_classes, *]."""
-    shape = np.array(labels.shape)
-    shape[1] = num_classes
-    result = torch.zeros(tuple(shape))
-    return result.scatter_(1, labels.cpu(), 1)
+    return F.one_hot(labels.squeeze(1).long().cpu(), num_classes).movedim(-1, 1).float()
 
 
 class BinaryDiceLoss(nn.Module):
@@ -91,15 +87,16 @@ class DiceLoss(nn.Module):
 
 def build_criterion(name: str):
     """Map a loss name to a callable. ``combo`` sums cross-entropy and Dice."""
-    if name == "ce":
-        return nn.CrossEntropyLoss()
-    if name == "dice":
-        return BinaryDiceLoss()
-    if name == "mse":
-        return nn.MSELoss()
-    if name == "combo":
-        ce, dice = nn.CrossEntropyLoss(), BinaryDiceLoss()
-        return lambda out, seg: ce(out, seg) + dice(out, seg)
+    match name:
+        case "ce":
+            return nn.CrossEntropyLoss()
+        case "dice":
+            return BinaryDiceLoss()
+        case "mse":
+            return nn.MSELoss()
+        case "combo":
+            ce, dice = nn.CrossEntropyLoss(), BinaryDiceLoss()
+            return lambda out, seg: ce(out, seg) + dice(out, seg)
     raise ValueError(f"unknown loss {name!r}; expected ce, dice, mse or combo")
 
 

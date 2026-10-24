@@ -12,6 +12,10 @@ The pipeline is:
 callers because it operates across a whole series at once.
 """
 
+from __future__ import annotations
+
+from pathlib import Path
+
 import numpy as np
 import torch
 import torchvision
@@ -25,7 +29,9 @@ from glacierview.config import (
 )
 
 
-def get_common_bands(rasters, common_bands: list):
+def get_common_bands(
+    rasters: dict[str, np.ndarray], common_bands: list[str]
+) -> dict[str, np.ndarray]:
     """Keep only `common_bands`, so every satellite yields the same channels.
 
     Landsat 5/7 and Landsat 8 order their bands differently (L8 has an extra
@@ -46,7 +52,7 @@ def get_common_bands(rasters, common_bands: list):
     return selected
 
 
-def normalize_rasters(rasters):
+def normalize_rasters(rasters: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     """Scale each band to roughly [0, 1], ignoring single-pixel extremes.
 
     This is deliberately not a plain min-max. The true minimum and maximum of a
@@ -81,7 +87,7 @@ def normalize_rasters(rasters):
     return normalized
 
 
-def resize_rasters(rasters, dim):
+def resize_rasters(rasters: dict[str, np.ndarray], dim: tuple[int, int]) -> dict[str, np.ndarray]:
     """Resize every raster to `dim`, preserving the HWC layout."""
     resizer = torchvision.transforms.Resize(dim)
     resized = {}
@@ -91,7 +97,11 @@ def resize_rasters(rasters, dim):
     return resized
 
 
-def prepare_glacier_stack(glacier_dir, dem_path, filtered_file_path=None):
+def prepare_glacier_stack(
+    glacier_dir: Path | str,
+    dem_path: Path | str,
+    filtered_file_path: Path | str | None = None,
+) -> tuple[np.ndarray, list[str], list[tuple[int, int]]]:
     """Read one glacier's scenes and return a model-ready stack.
 
     Returns:
@@ -126,7 +136,7 @@ def prepare_glacier_stack(glacier_dir, dem_path, filtered_file_path=None):
     return stack, file_names, original_sizes
 
 
-def add_spectral_indices(inputs):
+def add_spectral_indices(inputs: torch.Tensor) -> torch.Tensor:
     """Prepend NDSI then NDWI to an (N, C, H, W) batch.
 
     Each is prepended in turn, so NDWI ends up at channel 0 and NDSI at 1 —

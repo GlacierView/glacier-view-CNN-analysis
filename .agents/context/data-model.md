@@ -52,6 +52,6 @@ Two steps the paper documents that are easy to miss in the code:
 does), while `glacierview areas` computes the indices first and then smooths everything including them.
 
 ⚠️ Reprojection direction also differs: the paper says the *rasters* were reprojected to WGS 84 to
-match the polygons, while `mask_creator.ipynb` reprojects the *polygons* into each raster's UTM CRS.
+match the polygons, while notebook 09 reprojects the *polygons* into each raster's UTM CRS.
 Same alignment goal, opposite direction — likely an evolution, but don't assume either doc matches
 what produced a given artifact.

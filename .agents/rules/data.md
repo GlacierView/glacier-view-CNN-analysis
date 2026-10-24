@@ -10,6 +10,6 @@
   `us-west-1`. See `.agents/references/aws.md`.
 - A stray `full_time_series_c02_t1_l2/G007026E45991N/` sits beside `landsat/` rather than inside it
   — an old Trient download one level too high. Don't mistake it for the landing zone.
-- Notebooks hardcode `~/Desktop/projects/GlacierView` as the project root and `sys.path.insert` the
-  helpers directory; some point at an external SSD (`/Volumes/T7/...`). Scripts under
-  `src/segmentation/` use `Path(__file__)` instead and work from any directory.
+- Everything resolves paths through `glacierview.config`. To work off the external SSD, set
+  `GV_DATA_ROOT=/Volumes/T7/GlacierView`; to work off the committed sample, set
+  `GV_DATA_ROOT=data/sample/inference`.

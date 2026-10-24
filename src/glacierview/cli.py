@@ -53,19 +53,21 @@ def cmd_config(args) -> int:
         "data_label": label,
         "landing_zone": config.landing_zone(label),
         "landsat_dir": config.landsat_dir(label),
+        "dem_dir": config.dem_dir(label),
         "processed_metadata": config.processed_metadata_dir(label),
-        "glims_data": config.glims_data_dir(),
-        "training_data": config.training_data_dir(),
+        "glims_inventory": config.glims_inventory_path(),
+        "glims_selection": config.glims_selection_path(),
+        "masks": config.masks_dir(),
+        "training_set": config.training_set_dir(),
         "analysis_data": config.ANALYSIS_DIR,
+        "sample_inference": config.SAMPLE_INFERENCE_ROOT,
         "sql": config.SQL_DIR,
         "outputs": config.outputs_dir(),
     }
     width = max(len(k) for k in paths)
     for key, value in paths.items():
-        exists = "" if key in {"data_label"} else (
-            "  " if Path(value).exists() else "  (missing)"
-        )
-        print(f"{key:<{width}}  {value}{exists}")
+        missing = key != "data_label" and not Path(value).exists()
+        print(f"{key:<{width}}  {value}{'  (missing)' if missing else ''}")
     return 0
 
 
@@ -129,7 +131,7 @@ def cmd_train(args) -> int:
     from glacierview.models import save_state_dict
     from glacierview.training import GlacierDataset, TrainConfig, build_manifest, fit
 
-    data_dir = Path(args.data_dir) if args.data_dir else config.training_data_dir()
+    data_dir = Path(args.data_dir) if args.data_dir else config.training_set_dir()
     cfg = TrainConfig(
         epochs=args.epochs,
         learning_rate=args.lr,
@@ -206,7 +208,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_areas)
 
     p = sub.add_parser("train", parents=[common], help="train the model")
-    p.add_argument("--data-dir", help="holds images/ and masks/")
+    p.add_argument("--data-dir", help="holds images/ and masks/ (default: the training set)")
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--lr", type=float, default=1e-5)
     p.add_argument("--weight-decay", type=float, default=1e-5)

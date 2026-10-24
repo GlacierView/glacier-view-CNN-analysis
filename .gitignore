@@ -48,9 +48,12 @@ src/segmentation/unet_summer_model_unfrozen_100
 !data/analysis/*.xlsx
 !data/glims_18k.parquet
 
-# A 32-pair training fixture, committed so `glacierview train` can be smoke
-# tested without the full 9.3 GB set.
+# Committed fixtures: a 32-pair training set, so `glacierview train` can be
+# smoke tested without the full 9.3 GB set, and every Trient scene, so
+# inference runs with no S3 download. See data/sample/inference/README.md.
 !data/sample/**
+# Inference run with GV_DATA_ROOT=data/sample/inference and no --out-dir.
+data/sample/inference/segmentation/
 
 # figures/ is curated project artwork — diagrams, the architecture figure, the
 # UTM illustrations, paper plots. The blanket *.png / *.jpg rules above target

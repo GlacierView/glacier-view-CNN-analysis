@@ -34,6 +34,9 @@ ANALYSIS_DIR = REPO_ROOT / "data" / "analysis"
 #: A 32-pair training fixture, committed so training can be smoke tested
 #: without the full set.
 SAMPLE_TRAINING_DIR = REPO_ROOT / "data" / "sample" / "training"
+#: Every Trient scene plus its DEM, laid out like DATA_ROOT, committed so
+#: inference runs with no download: ``GV_DATA_ROOT=<this> glacierview infer ...``.
+SAMPLE_INFERENCE_ROOT = REPO_ROOT / "data" / "sample" / "inference"
 #: Athena queries, run by hand against the glacier-view catalog.
 SQL_DIR = REPO_ROOT / "sql"
 

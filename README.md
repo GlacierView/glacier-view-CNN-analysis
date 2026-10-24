@@ -40,13 +40,13 @@ Before you begin, ensure you have the following prerequisites:
 1. Clone this repository to your local machine:
 
 ```bash
-git clone https://github.com/mattwaismann/glacier-view-analysis.git
+git clone https://github.com/GlacierView/glacier-view-CNN-analysis.git
 ```
 
 2. Navigate to the project directory:
 
 ```bash
-cd glacier-view-analysis
+cd glacier-view-CNN-analysis
 ```
 
 3. Install the dependencies with [uv](https://docs.astral.sh/uv/):
@@ -68,6 +68,14 @@ uv run glacierview config                     # print every resolved path
 uv run glacierview infer  --glims-id G007026E45991N --checkpoint <path>
 uv run glacierview areas  --checkpoint <path>
 uv run glacierview train  --epochs 10 --batch-size 32 --out-dir experiments/run1
+```
+
+Try inference without downloading anything. Every Trient scene is committed, and the model comes
+from the Hugging Face Hub (private, so `hf auth login` first):
+
+```bash
+GV_DATA_ROOT=data/sample/inference uv run glacierview infer --glims-id G007026E45991N \
+  --checkpoint GlacierView/glacierview-unet --out-dir /tmp/trient
 ```
 
 Try training without downloading anything — a 32-pair fixture is committed:
@@ -97,6 +105,7 @@ notebooks/
 sql/                    Athena queries
 data/analysis/          committed reference CSVs
 data/sample/training/   a 32-pair training fixture
+data/sample/inference/  every Trient scene, plus 1 scene/DEM/mask for 100 more glaciers
 docs/                   onboarding guide, design doc, model manifest
 .agents/                agent-facing rules, context, skills, references
 ```

@@ -12,8 +12,10 @@ script fails with::
 `load_checkpoint` injects the names into ``__main__`` before unpickling, which
 is why callers no longer need to import the classes for their side effect.
 
-Prefer `save_state_dict` for anything shared outside this repo: a state dict
-carries no class references and no arbitrary-code-execution risk.
+The published weights are a safetensors state dict on the Hugging Face Hub
+(`HF_REPO_ID`), which carries no class references and no
+arbitrary-code-execution risk. `load_checkpoint` takes either form;
+`export_pretrained` turns a pickled checkpoint into the published one.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from pathlib import Path
 import torch
 
 from glacierview.log import get_logger
-from glacierview.models.unet import IN_CHANNELS, UNet, conv_block
+from glacierview.models.unet import HF_REPO_ID, IN_CHANNELS, UNet, conv_block
 
 logger = get_logger(__name__)
 
@@ -38,18 +40,34 @@ def _inject_legacy_names() -> None:
 
 
 def load_checkpoint(path: str | Path, device: torch.device | str = "cpu") -> UNet:
-    """Load a pickled-module checkpoint and put it in eval mode.
+    """Load a checkpoint and put it in eval mode.
+
+    ``path`` is one of:
+
+    * a pickled-module checkpoint file (the original format);
+    * a directory written by `export_pretrained` / ``save_pretrained``;
+    * a Hugging Face repo id such as ``GlacierView/glacierview-unet``, optionally
+      pinned to a tag or commit as ``GlacierView/glacierview-unet@v1-paper``.
 
     Raises:
         FileNotFoundError: with the searched path, rather than torch's less
             helpful error.
     """
-    path = Path(path)
+    local = Path(path)
+    if local.is_dir() or (not local.exists() and _looks_like_repo_id(str(path))):
+        repo_id, _, revision = str(path).partition("@")
+        model = UNet.from_pretrained(
+            repo_id, revision=revision or None, map_location=str(device), strict=True
+        )
+        model.to(device).eval()
+        logger.info("loaded %s onto %s", path, device)
+        return model
+
+    path = local
     if not path.exists():
         raise FileNotFoundError(
-            f"no checkpoint at {path}. Released checkpoints live in "
-            f"s3://segmentation-model-gv/checkpoints/pytorch/ — see "
-            f"docs/MODEL_MANIFEST.md"
+            f"no checkpoint at {path}. Pass a Hugging Face repo id such as "
+            f"{HF_REPO_ID}, or see docs/MODEL_MANIFEST.md for the original files"
         )
     _inject_legacy_names()
     model = torch.load(path, map_location=device, weights_only=False)
@@ -72,3 +90,36 @@ def save_state_dict(model: UNet, path: str | Path) -> Path:
     torch.save(model.state_dict(), path)
     logger.info("wrote state dict to %s", path)
     return path
+
+
+def _looks_like_repo_id(text: str) -> bool:
+    """``owner/name`` or ``owner/name@revision``, with no other path parts."""
+    parts = text.partition("@")[0].split("/")
+    return len(parts) == 2 and all(parts)
+
+
+#: Facts about the inputs and outputs, written into the published config.json
+#: next to the constructor arguments. `from_pretrained` ignores them.
+MODEL_CONTRACT = {
+    "in_channels": IN_CHANNELS,
+    "channel_order": ["ndwi", "ndsi", "blue", "green", "red", "nir", "swir", "thermal", "dem"],
+    "input_size": [128, 128],
+    "glacier_class": 1,
+    "threshold": 0.5,
+    "km2_per_pixel": 0.0009,
+}
+
+
+def export_pretrained(checkpoint: str | Path, out_dir: str | Path) -> Path:
+    """Convert a pickled checkpoint to the published safetensors format.
+
+    Writes ``model.safetensors`` and ``config.json`` into ``out_dir``.
+    """
+    pickled = load_checkpoint(checkpoint)
+    model = UNet(n_class=getattr(pickled, "n_class", 2), pretrained_encoder=False)
+    model.load_state_dict(pickled.state_dict(), strict=True)
+    config = {"n_class": model.n_class, "freeze_encoder": True,
+              "pretrained_encoder": False, **MODEL_CONTRACT}
+    model.save_pretrained(out_dir, config=config)
+    logger.info("exported %s to %s", Path(checkpoint).name, out_dir)
+    return Path(out_dir)

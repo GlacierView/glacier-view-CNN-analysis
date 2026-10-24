@@ -20,6 +20,9 @@ dependencies = [
     "torch>=2.1",
     "torchvision>=0.16",
     "torchmetrics>=1.2",
+    # Published weights: safetensors on the Hugging Face Hub
+    "huggingface-hub>=0.36",
+    "safetensors>=0.6",
     # Arrays, tables, plotting
     "numpy>=1.24",
     "pandas>=2.0",

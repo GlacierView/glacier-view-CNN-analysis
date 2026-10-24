@@ -1,7 +1,7 @@
 """Command-line entry points.
 
-    glacierview infer  --glims-id G007026E45991N --checkpoint <path>
-    glacierview areas  --checkpoint <path>
+    glacierview infer  --glims-id G007026E45991N --checkpoint GlacierView/glacierview-unet
+    glacierview areas  --checkpoint <path or Hugging Face repo id>
     glacierview train  --data-dir <dir> --epochs 10
     glacierview config
 
@@ -21,6 +21,11 @@ from glacierview import __version__, config
 from glacierview.log import configure, get_logger
 
 logger = get_logger(__name__)
+
+CHECKPOINT_HELP = (
+    "a checkpoint file, an exported directory, or a Hugging Face repo id "
+    "(e.g. GlacierView/glacierview-unet, or ...@v1-paper to pin a version)"
+)
 
 
 def _device(requested: str | None):
@@ -190,12 +195,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("infer", parents=[common], help="segment one glacier")
     p.add_argument("--glims-id", required=True)
-    p.add_argument("--checkpoint", required=True)
+    p.add_argument("--checkpoint", required=True, help=CHECKPOINT_HELP)
     p.add_argument("--no-gif", action="store_true")
     p.set_defaults(func=cmd_infer)
 
     p = sub.add_parser("areas", parents=[common], help="segment the whole landing zone")
-    p.add_argument("--checkpoint", required=True)
+    p.add_argument("--checkpoint", required=True, help=CHECKPOINT_HELP)
     p.add_argument("--glims-id", action="append", help="repeat to limit the run")
     p.add_argument("--no-gif", action="store_true")
     p.set_defaults(func=cmd_areas)

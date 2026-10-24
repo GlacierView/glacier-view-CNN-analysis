@@ -1,6 +1,10 @@
-"""Training: dataset construction, losses, and the training loop."""
+"""Training: building the set, dataset construction, losses, and the training loop."""
 
+from glacierview.training.build import build_training_pair, rasterize_outline
 from glacierview.training.dataset import GlacierDataset, build_manifest
 from glacierview.training.trainer import TrainConfig, TrainResult, fit
 
-__all__ = ["GlacierDataset", "TrainConfig", "TrainResult", "build_manifest", "fit"]
+__all__ = [
+    "GlacierDataset", "TrainConfig", "TrainResult", "build_manifest", "build_training_pair",
+    "fit", "rasterize_outline",
+]

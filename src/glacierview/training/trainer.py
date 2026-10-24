@@ -15,7 +15,7 @@ see git history. New runs should use this.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import torch
@@ -54,7 +54,7 @@ class TrainConfig:
     num_workers: int = 0
 
     def as_dict(self) -> dict:
-        return {k: getattr(self, k) for k in self.__dataclass_fields__}
+        return asdict(self)
 
 
 @dataclass

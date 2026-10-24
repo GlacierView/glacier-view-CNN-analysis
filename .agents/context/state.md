@@ -5,8 +5,8 @@ Checked by diffing local inventories against the buckets.
 **Present and complete:**
 
 - Ready-to-train data — `training/data/processed_training_data_summer_months/` holds 7,174 images +
-  8,902 masks, an exact mirror of `training-images-t1-l2-sr`. `glacierview train` wants it at
-  `training_data/{images,masks}` relative to its cwd, so symlink rather than re-download.
+  8,902 masks, an exact mirror of `training-images-t1-l2-sr`. `glacierview train` reads it from
+  `config.training_set_dir()` by default, so it trains on this with no flags.
 - Raw training data — 18,093 glacier dirs of imagery and DEMs under
   `localized_time_series_for_training_c02_t1_l2/`, plus `masks_staging_2/`. That is 148 glaciers *more*
   than `raw-training-images-t1-l2-sr` holds (see "unbacked" below).
@@ -16,16 +16,20 @@ Checked by diffing local inventories against the buckets.
 **Missing and blocking:**
 
 - `full_time_series_c02_t1_l2/landsat/` is **empty** — every inference image is absent. That tree lived
-  on an external SSD (`/Volumes/T7/GlacierView/ee_landing_zone/...`, which
-  `time_series_metadata_handler.ipynb` still points at). Nothing needed is missing *upstream*: all 245
-  glaciers in `filtered_inference_data.csv`, and all 1,024 in `geog_area_rollup_250.csv`, exist in S3.
-- `model` — both inference scripts `torch.load("model")` relative to cwd, and no such file exists.
-  Copy or symlink `src/segmentation/unet_summer_model_unfrozen_100` into place.
-- `glacier_areas/` under the output directory — `glacierview areas` writes `glacier_areas\\{glims_id}_areas.csv`
-  into it but never creates it (and the path uses a Windows separator). Every iteration will throw
-  into the bare `except`, so the per-glacier CSVs silently never appear while the aggregate ones do.
+  on an external SSD (`/Volumes/T7/GlacierView/ee_landing_zone/...`; set `GV_DATA_ROOT` to use it).
+  Nothing needed is missing *upstream*: all 245 glaciers in `filtered_inference_data.csv`, and all
+  1,024 in `geog_area_rollup_250.csv`, exist in S3. Trient and 100 single-scene glaciers are committed
+  under `data/sample/inference`, so inference runs without it.
+- ~~`model` checkpoint file~~ — fixed: `--checkpoint GlacierView/glacierview-unet` loads the
+  published model from Hugging Face.
+- ~~`glacier_areas/` never created~~ — fixed: `glacierview areas` creates it and writes the
+  per-glacier CSVs.
 - ~~Input-channel mismatch~~ — fixed. All entry points now derive their channel count from
   `IN_CHANNELS` in `glacierview.models.unet` and assert it before the first convolution.
+- ~~Truncated bounding boxes~~ — fixed 2026-10-23. Running notebook 01 under numpy 2 had written
+  `np.float64(...)` reprs that overflowed the shapefile's 254-character field, corrupting 17,354 of
+  18,093 `bboxes`. `glims.add_bounding_boxes` writes plain floats, and the shapefile is regenerated
+  and verified against `data/glims_18k.parquet`.
 
 **Missing, regenerable:** `areas_no_threshold.csv`, `areas_05_thresh.csv`, `areas_binary_05.csv` are
 outputs `glacierview areas` creates on startup.
@@ -69,11 +73,14 @@ vintage, kept for comparison.
    North America is the one that matters: as published it is the slowest decline by a wide margin;
    corrected it is in line with Asia. The fix changes the regional *ordering*, not just magnitudes.
 
-2. **There is an undocumented quality filter.** `rel_decline` keeps only glaciers whose predicted
-   area is within 8% of the GLIMS training area (`rel_error_train < 8`). The paper does not mention
-   it, and it gates every regional result.
-Note `geog_area_rollup` here includes **Oceania**, which the SQL treats as southern-hemisphere but
-which never appears among the paper's five regions; those 35 glaciers drop out somewhere.
+2. **Two glaciers are dropped by a positional slice** (`iloc[:, 2:]` on the annual table removed
+   Trient and `G007045E45994N`), which is how 1,085 columns become the paper's 1,083.
+
+The notebook now reproduces both the "as published" and "corrected" columns above exactly, with
+each quirk behind its own flag. An earlier note here said a `rel_error_train < 8` filter gated the
+results; it doesn't. The original computed that filter and never applied it, and the published
+figures reproduce with no filter. Oceania's 35 glaciers drop out because the analysis only covers
+the paper's five regions.
 
 **Present locally but unbacked — in S3 nowhere:**
 

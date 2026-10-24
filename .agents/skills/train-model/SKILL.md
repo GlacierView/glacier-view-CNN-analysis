@@ -7,20 +7,19 @@ To retrain or fine-tune the segmentation U-Net.
 ## Workflow
 
 ```bash
-cd src/segmentation/training/src
-ln -s ../data/processed_training_data_summer_months training_data
-uv run python train.py --epochs 10 --lr 0.00001 --decay 0.00001 --batch 32
+uv run glacierview train --epochs 10 --out-dir experiments/run1
+# smoke test on the committed 32-pair fixture
+uv run glacierview train --data-dir data/sample/training --epochs 1 --batch-size 4 --device cpu \
+  --out-dir /tmp/smoke
 ```
 
-`glacierview train` expects `training_data/{images,masks}` relative to its working directory. It writes each
-run to `experiments/<counter>/` (hyperparameters, loss plot, dice histogram, `model`) and also
-overwrites the checkpoint path you pass to `--checkpoint`.
+`--data-dir` defaults to `config.training_set_dir()` (the `images/` + `masks/` set notebook 10
+builds). Each run writes `model.state_dict.pt` and `run.json` (config, per-epoch losses, best epoch,
+test Dice and Jaccard) to `--out-dir`.
 
 ## Match the published recipe
 
-The script's defaults are not what the paper used:
-
-The CLI defaults now *are* the published recipe — learning rate 1e-5, batch
+The CLI defaults *are* the published recipe — learning rate 1e-5, batch
 size 32, unfrozen encoder, cross-entropy, a 90/5/5 split, and the epoch that
 minimises eval loss. The old script defaulted to batch size 2, had no eval
 split, and kept whatever the last epoch produced.
@@ -36,7 +35,8 @@ paper's exact numbers therefore needs the old script from git history.
   model takes. The loader checks this per image and names the offending file.
 - Two tif vintages exist: the current set reads back as `(1, 128, 128, 7)`,
   an older one as `(128, 128, 8)`. The loader normalises both to channel-first.
-- Reported test Dice is 0.92. Full ablation trail in `.agents/references/paper.md`.
+- The paper reports test Dice 0.92; the published checkpoint measures 0.868 on a re-drawn holdout
+  (`docs/MODEL_MANIFEST.md`). Full ablation trail in `.agents/references/paper.md`.
 
 ## References
 

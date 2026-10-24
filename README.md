@@ -90,13 +90,15 @@ uv run glacierview train --data-dir data/sample/training --epochs 2 \
 ```
 src/glacierview/        the package: import it, or drive it from the CLI
   config.py             paths and constants, overridable by env var
+  glims.py              glacier selection, bounding boxes, regions
+  earthengine/          Earth Engine export
+  metadata.py           the per-scene tables behind Athena
   rasters.py            read GeoTIFFs and DEMs
   preprocess.py         bands -> normalise -> resize -> indices
   bands.py              per-satellite band maps
   models/               the U-Net and checkpoint loading
-  earthengine/          Earth Engine export
   inference/            predict, measure areas, render
-  training/             dataset, losses, training loop
+  training/             build the set, dataset, losses, training loop
   cli.py                entry points
 notebooks/
   pipeline/             numbered dataset-building steps

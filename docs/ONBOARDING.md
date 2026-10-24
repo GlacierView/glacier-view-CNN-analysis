@@ -213,7 +213,7 @@ identified by an **EPSG code**. Two you'll meet:
 **The UTM gotcha, which cost this project real time:** a glacier sitting on a zone boundary can be
 delivered in zone 31 on one date and zone 32 on another. Same ice, different coordinate numbers. So
 turning a lat/long GLIMS polygon into a pixel mask requires knowing *that specific image's* CRS.
-`mask_creator.ipynb` builds a glacier→CRS lookup from the metadata to handle this, and
+Notebook 09 reprojects each outline into the CRS of the scene it masks to handle this, and
 `figures/utm zone 31-32 overlap trient landsat 7-5.png` is a picture of the problem.
 
 ### Image-quality metadata
@@ -322,8 +322,9 @@ the parquet exists purely so Athena can query glacier attributes).
 archive; you send it a query and it returns just your clipped region. Requires a Google account with
 EE access and `ee.Authenticate()` once.
 
-The class `EePull` has one method per satellite (`export_landsat_five_images`, `…seven…`, `…eight…`)
-plus `export_nasa_dems`. Each builds an **ImageCollection** and filters it *server-side* — which
+The class `EePull` has `export_landsat(satellite, ...)` for one satellite, `export_all_landsat(...)` for
+all three, and `export_dem(...)`. Each Landsat export builds an **ImageCollection** and filters it
+*server-side* — which
 matters, because filtering server-side means you never pay to download images you'd throw away:
 
 ```python
@@ -421,15 +422,16 @@ Four things to know about this SQL, all verified by reading it:
 
 ### Stage 5 — Build the training set
 
-**Where:** `notebooks/pipeline/09_build_masks.ipynb`, then `get_training_set.ipynb`
+**Where:** `notebooks/pipeline/09_build_masks.ipynb`, then `10_build_training_set.ipynb`, both
+calling `glacierview.training.build`
 
-`mask_creator.ipynb` turns each glacier's lat/long GLIMS polygon into a pixel mask aligned to that
-glacier's imagery: build a glacier→CRS map from `image_attributes.csv`, reproject the polygon into
-that CRS, then rasterize it (polygon in, 1s-inside/0s-outside raster out). Output goes to
+Notebook 09 (`rasterize_outline`) turns each glacier's lat/long GLIMS polygon into a pixel mask aligned
+to that glacier's imagery: take the glacier's first scene in `image_attributes.csv`, reproject the
+polygon into that scene's CRS, then rasterize it (polygon in, 1s-inside/0s-outside raster out). Output goes to
 `training/data/masks_staging_2/` at each glacier's **native** resolution — e.g. 50×57 pixels for one
 small glacier (verified by reading the TIFF headers).
 
-`get_training_set.ipynb` then assembles the trainable pairs: take the filtered file list from SQL,
+Notebook 10 (`build_training_pair`) then assembles the trainable pairs: take the filtered file list from SQL,
 select the common bands, normalize, resize everything to 128×128, stack the DEM on as a final
 channel, and write matched `images/` and `masks/` tifs.
 
@@ -440,7 +442,7 @@ debris and transient defects. So "one training image per glacier" means one *ave
 from however many scenes happened to be available in that window — which varies per glacier.
 
 The paper also describes reprojecting the **rasters** to WGS 84 to match the polygons, whereas
-`mask_creator.ipynb` reprojects the **polygons** into each raster's UTM CRS. Same goal, opposite
+notebook 09 reprojects the **polygons** into each raster's UTM CRS. Same goal, opposite
 direction. Probably an evolution in approach; don't assume either description matches how a given
 artifact on disk was produced.
 
@@ -552,15 +554,17 @@ figures/                diagrams and plots
 | `rasters.py` | Reads GeoTIFFs and DEMs into HWC arrays, clamping negatives and `-inf` to zero. `get_rasters` takes an optional `filtered_file_path` — a CSV of filenames — which is how the metadata quality filter is applied before anything reaches memory. |
 | `preprocess.py` | The shared pipeline: select common bands per satellite, normalize, resize to 128×128, stack the DEM, prepend NDSI and NDWI. Both inference paths use it, so they cannot drift. |
 | `bands.py` | Pure data: per-satellite band-name→index maps. The `extra*` padding entries must stay — the selection mask is positional over the raster's band axis. |
-| `viz.py` | Plotting helpers for eyeballing rasters in notebooks. |
+| `glims.py` | The GLIMS selection rules, bounding boxes, and the region rollup map (notebooks 01–02). |
+| `metadata.py` | Pull-log parsing, scene and image attributes, flattened Earth Engine metadata: the tables behind Athena (notebooks 06–07). Column order is a contract. |
 | `models/unet.py` | **The only definition of the model.** `IN_CHANNELS = 9`. |
 | `models/checkpoints.py` | `load_checkpoint` and `save_state_dict`. Isolates the pickle quirk described in Part 7. |
-| `earthengine/export.py` | The `EePull` class: one method per Landsat satellite plus NASADEM, with server-side filtering. |
+| `earthengine/export.py` | `EePull`: Landsat 5/7/8 and NASADEM export with server-side filtering, and the pull log `metadata.parse_pull_log` reads. |
 | `inference/predict.py` | The shared core: build inputs, predict, convert masks to km². |
 | `inference/render.py` | GIFs and area plots. Uses a headless matplotlib backend. |
 | `inference/batch.py` | The whole-landing-zone runner, with per-glacier failure isolation and a summary tally. |
 | `training/dataset.py` | `build_manifest` (pairs images to masks on GLIMS ID) and `GlacierDataset`. |
 | `training/losses.py` | Cross-entropy, Dice, and local `dice_score` / `jaccard_index` metrics. |
+| `training/build.py` | `rasterize_outline` and `build_training_pair`: GLIMS outlines to masks, scenes to model-ready pairs (notebooks 09–10). |
 | `training/trainer.py` | `TrainConfig`, the epoch loop, eval-based model selection, scoring. |
 | `cli.py` | `glacierview {config,infer,areas,train}`. |
 
@@ -569,10 +573,10 @@ figures/                diagrams and plots
 See `notebooks/README.md` for a per-notebook description. In short:
 
 - **`pipeline/`** — 10 numbered steps that build the datasets. Kept as
-  notebooks because each runs rarely and involves judgement about what to keep.
-  They are drivers: the logic they call lives in the package.
-- **`exploration/`** — 6 sandboxes. Not expected to run top to bottom.
-  `inspect_training_data.ipynb` is the best first look at the actual data.
+  notebooks because each runs rarely and is inspected as it goes. They are
+  drivers: the logic they call lives in the package.
+- **`exploration/`** — 4 notebooks for looking at the data. The end of
+  notebook 10 is the best first look at the training pairs.
 - **`analysis/`** — the published area analysis.
 
 ### `sql/` — Athena queries
@@ -1107,7 +1111,7 @@ was used. Always exclude `.DS_Store` (some are 660 KB) and `meta_data/`.
 uv run glacierview train --epochs 10 --batch-size 32 --out-dir experiments/run1
 ```
 
-`--data-dir` defaults to `config.training_data_dir()`. Each run writes
+`--data-dir` defaults to `config.training_set_dir()`, the set notebook 10 builds. Each run writes
 `model.state_dict.pt` and `run.json` (config, per-epoch train and eval losses,
 best epoch, test Dice and Jaccard).
 

@@ -14,6 +14,7 @@ Order of operations, matching the published method:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -32,7 +33,7 @@ logger = get_logger(__name__)
 
 #: How an area is derived from the probability map. Three variants are kept
 #: because the published analysis compared them.
-AREA_VARIANTS: dict[str, callable] = {
+AREA_VARIANTS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {
     "raw": lambda p: p.clamp(min=0),
     "thresholded": lambda p: torch.where(
         p > config.PROB_THRESHOLD, p, torch.zeros_like(p)
@@ -64,7 +65,7 @@ def build_inputs(
         original_sizes: each scene's native (height, width), for area.
     """
     stack, file_names, original_sizes = prepare_glacier_stack(
-        str(glacier_dir), str(dem_path), filtered_file_path=filtered_file_path
+        glacier_dir, dem_path, filtered_file_path=filtered_file_path
     )
     # A scene with no valid pixels normalises to NaN; fill from the rest of
     # the stack rather than letting it reach the model.

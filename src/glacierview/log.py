@@ -26,6 +26,8 @@ def configure(verbose: bool = False, logfile: str | None = None) -> None:
     # These are chatty at DEBUG and rarely what you are debugging.
     for noisy in ("matplotlib", "PIL", "rasterio", "botocore", "urllib3", "fiona"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+    # GDAL warns about every Earth Engine GeoTIFF's ExtraSamples tag; harmless.
+    logging.getLogger("rasterio._env").setLevel(logging.ERROR)
 
 
 def get_logger(name: str) -> logging.Logger:

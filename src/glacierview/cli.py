@@ -2,6 +2,7 @@
 
     glacierview infer  --glims-id G007026E45991N --checkpoint GlacierView/glacierview-unet
     glacierview areas  --checkpoint <path or Hugging Face repo id>
+    glacierview areas-s3 --file-list <csv> --checkpoint GlacierView/glacierview-unet
     glacierview train  --data-dir <dir> --epochs 10
     glacierview config
 
@@ -126,6 +127,63 @@ def cmd_areas(args) -> int:
     return 0 if not summary["failures"] else 1
 
 
+def cmd_areas_s3(args) -> int:
+    """Segment the glaciers in a file list, pulling them from S3 a batch at a time.
+
+    Each batch's scenes are downloaded, segmented and deleted before the next,
+    so the disk only ever holds one batch. Glaciers already in ``--out-dir``
+    are skipped, which makes an interrupted run resumable by rerunning it.
+    """
+    from glacierview.inference import batch, s3_stage
+    from glacierview.models import load_checkpoint
+
+    files = s3_stage.read_file_list(args.file_list)
+    glims_ids = sorted(files["glims_id"].unique())
+    if args.glims_id:
+        glims_ids = [g for g in glims_ids if g in set(args.glims_id)]
+    out_dir = Path(args.out_dir) if args.out_dir else config.outputs_dir() / "areas_s3"
+    done = batch.done_glims_ids(out_dir)
+    todo = [g for g in glims_ids if g not in done]
+    if args.limit:
+        todo = todo[: args.limit]
+    logger.info(
+        "%d glaciers in the list, %d already done, %d to run in batches of %d",
+        len(glims_ids), len(done.intersection(glims_ids)), len(todo), args.batch_size,
+    )
+    if not todo:
+        print("nothing to do")
+        return 0
+
+    device = _device(args.device)
+    model = load_checkpoint(args.checkpoint, device)
+
+    succeeded, failures = 0, []
+    for start in range(0, len(todo), args.batch_size):
+        chunk = todo[start : start + args.batch_size]
+        logger.info("batch %d-%d of %d", start + 1, start + len(chunk), len(todo))
+        with s3_stage.staged(chunk, files, args.data_label, workers=args.workers) as staged:
+            failures += staged.failed
+            if not staged.ready:
+                continue
+            summary = batch.run(
+                model, device, out_dir,
+                data_label=args.data_label,
+                glims_ids=staged.ready,
+                write_gifs=False,
+                filtered_file_path=args.file_list,
+                skip_done=True,
+            )
+        succeeded += summary["succeeded"]
+        failures += summary["failures"]
+
+    print(json.dumps(
+        {"total": len(todo), "succeeded": succeeded, "failures": failures,
+         "out_dir": str(out_dir)},
+        indent=2,
+    ))
+    return 0 if not failures else 1
+
+
 def cmd_train(args) -> int:
     """Train the segmentation model."""
     from glacierview.models import save_state_dict
@@ -206,6 +264,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--glims-id", action="append", help="repeat to limit the run")
     p.add_argument("--no-gif", action="store_true")
     p.set_defaults(func=cmd_areas)
+
+    p = sub.add_parser(
+        "areas-s3", parents=[common],
+        help="segment glaciers from a file list, pulling them from S3 in batches",
+    )
+    p.add_argument(
+        "--file-list", required=True,
+        help="Athena output of sql/inference_data_query_250.sql (glims_id, file_name)",
+    )
+    p.add_argument("--checkpoint", required=True, help=CHECKPOINT_HELP)
+    p.add_argument("--batch-size", type=int, default=25, help="glaciers per download")
+    p.add_argument("--workers", type=int, default=16, help="parallel glacier downloads")
+    p.add_argument("--limit", type=int, help="stop after this many glaciers (for a trial run)")
+    p.add_argument("--glims-id", action="append", help="repeat to limit the run")
+    p.set_defaults(func=cmd_areas_s3)
 
     p = sub.add_parser("train", parents=[common], help="train the model")
     p.add_argument("--data-dir", help="holds images/ and masks/ (default: the training set)")

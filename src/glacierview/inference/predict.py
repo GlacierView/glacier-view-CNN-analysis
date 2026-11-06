@@ -118,8 +118,12 @@ def segment_glacier(
     device: torch.device,
     data_label: str | None = None,
     variants: tuple[str, ...] = ("binary",),
+    filtered_file_path: Path | str | None = None,
 ) -> dict:
     """Segment one glacier end to end.
+
+    ``filtered_file_path`` restricts the scenes read to those listed there;
+    by default every ``.tif`` in the glacier's directory is used.
 
     Returns a dict with ``file_names``, ``dates``, ``probabilities``,
     ``smoothed`` and an ``areas`` mapping of variant name to km^2 series.
@@ -127,6 +131,7 @@ def segment_glacier(
     inputs, smoothed, file_names, sizes = build_inputs(
         config.glacier_dir(glims_id, data_label),
         config.dem_path(glims_id, data_label),
+        filtered_file_path=filtered_file_path,
     )
     logger.info("%s: %d scenes", glims_id, len(file_names))
 

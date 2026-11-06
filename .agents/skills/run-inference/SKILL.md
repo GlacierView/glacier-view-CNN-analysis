@@ -24,12 +24,42 @@ uv run glacierview areas --checkpoint <path> --glims-id G007026E45991N --no-gif
 ```
 
 Writes three aggregate CSVs (raw, thresholded, binary), per-glacier CSVs under
-`glacier_areas/`, and GIFs. Aggregates are rewritten after each glacier, so a
-run that dies partway still leaves usable output.
+`glacier_areas/` (one column per variant), and GIFs. Each per-glacier CSV is
+written as soon as that glacier finishes, and the aggregates are rebuilt from
+all of them when the run ends, even on Ctrl-C. So a run that dies partway still
+leaves usable output, and `glacierview.inference.batch.write_aggregates(out_dir)`
+rebuilds the aggregates by hand.
 
 **Read the summary it prints.** Failures are logged with a traceback and
 counted, not raised — with hundreds of glaciers one bad scene should not cost
 the run. The exit code is non-zero if anything failed.
+
+## The 250-per-region set, streamed from S3
+
+The 1,024 glaciers chosen by `sql/inference_data_query_250.sql` are 68,880
+scenes / 57.5 GB, more than a laptop holds. `areas-s3` downloads a batch of
+glaciers' listed scenes, segments them, deletes them, and moves on:
+
+```bash
+uv run hf auth login     # once: the Hugging Face repo is private
+aws s3 cp --region us-west-1 <Athena result of inference_data_query_250.sql> \
+  src/glims/data/inference_samples/filtered_inference_data_250.csv
+caffeinate -i uv run glacierview --logfile areas_s3.log areas-s3 \
+  --file-list src/glims/data/inference_samples/filtered_inference_data_250.csv \
+  --checkpoint GlacierView/glacierview-unet --out-dir <dir>
+```
+
+`--logfile` belongs to `glacierview` itself, so it goes before the subcommand.
+
+```
+```
+
+`scripts/run_inference_250.sh` wraps this command with its prerequisites
+documented; extra flags pass through to `areas-s3`. Try `--limit 4 --batch-size 2` first. It checks free space before each batch,
+deletes only directories it downloaded (a glacier already on disk is used and
+kept), and keeps the DEMs (89 MB in all). Rerun the same command to resume:
+glaciers with a CSV in `<dir>/glacier_areas/` are skipped, and the aggregates
+are rebuilt from all of them. No GIFs are written; use `infer` for those.
 
 ## Getting the imagery first
 

@@ -1111,6 +1111,11 @@ than relying on what you happened to download.
 `aws s3 sync` was too slow for the original upload; `cp --recursive` is what
 was used. Always exclude `.DS_Store` (some are 660 KB) and `meta_data/`.
 
+For the 250-per-region set (1,024 glaciers / 57.5 GB) you don't need the disk
+space: `glacierview areas-s3 --file-list <output of inference_data_query_250.sql>`
+pulls a batch of glaciers from S3, segments them, deletes them and moves on,
+and resumes if rerun. See `.agents/skills/run-inference/SKILL.md`.
+
 ### Step 6 — full training run
 
 ```bash

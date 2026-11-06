@@ -1,5 +1,6 @@
 Screen Shot*
 *.csv
+*.log
 *.pyc
 .DS_Store
 .ipynb_checkpoints

@@ -586,6 +586,8 @@ See `notebooks/README.md` for a per-notebook description. In short:
 | `training_data_query.sql` | One representative summer image per glacier. |
 | `inference_data_query.sql` | All qualifying summer images per glacier (`rank_score` commented out — that one line is the difference between a snapshot and a 40-year series). |
 | `identify_inference_glims_ids_geog_area_rollup_50.sql` | Top 50 glaciers per region by `db_area`. |
+| `identify_inference_glims_ids_geog_area_rollup_250.sql` | Top 250 glaciers per region by `db_area` — 1,024 glaciers. One row per glacier, from the *training* tables: a glacier list, not a file list. |
+| `inference_data_query_250.sql` | All qualifying summer images for those 1,024 glaciers, from the `_250` tables — the file list to pull from `full-time-series-images-t1-l2-sr`. Embeds the selection query, so it runs standalone. |
 | `denormalized_training_metadata.sql` | De-dupes `ee_metadata` by version, coalesces the two image-quality columns. |
 
 `identify_inference_glims_ids_geog_area_rollup_250.sql` is a **reconstruction**,
@@ -594,9 +596,11 @@ was never saved; the console history is not readable with the team IAM role.
 But the reconstruction is verified rather than guessed: the query's output
 survives as both an Athena result in
 `s3://glacier-view-athena-output-us-west-1/Unsaved/2024/09/11/` and as
-`geog_area_rollup_250.csv` in the repo — byte-identical — and that output pins
-every parameter. It differs from the `_50` query by one value,
-`geog_size_rank <= 250`. The file's header comment records the evidence.
+`src/glims/data/inference_samples/geog_area_rollup_250.csv` (gitignored, so only
+on a local data disk) — byte-identical — and that output pins every parameter.
+It differs from the `_50` query by one value, `geog_size_rank <= 250`. The
+file's header comment records the evidence. Re-running it on 2026-10-30
+reproduced the 2024 result byte for byte.
 
 Note it reads the **training** metadata tables, not the `_250` ones: glacier
 selection happens before the inference imagery exists, so the `_250` tables are
@@ -702,22 +706,24 @@ There are also `glacier-view-trient-only` and `test` databases in us-west-1, and
 clean ones above. The committed SQL uses unqualified names, so set your Athena database to
 `glacier-view` and it resolves.
 
-### The 250-glacier expansion is half-finished
+### The 250-glacier expansion: data ready, inference not yet run
 
 This matters for planning. In September 2024 the project expanded from 50 to 250 glaciers per region:
 - ✅ The imagery was downloaded — the bucket holds 1,101 glaciers.
 - ✅ The metadata was processed and crawled — the `_250` tables exist and are populated.
-- ✅ The glacier list exists — `geog_area_rollup_250.csv`, **1,024 unique glaciers**. (Not 1,250:
-  Caucausus only yielded 74 and Europe 199 before running out of qualifying glaciers; Asia 250,
-  South America 250, North America 251.)
-- ❌ **The per-file filtering was never done for it.** The SQL file is empty (0 bytes), and the only
-  filtered file list on disk — `filtered_inference_data.csv` — covers **245 glaciers** (50 per
-  region, South America 45), i.e. the *old* 50 vintage.
+- ✅ The glacier list exists — `identify_inference_glims_ids_geog_area_rollup_250.sql`,
+  **1,024 unique glaciers**. (Not 1,250: Caucausus only yielded 74 and Europe 199 before running
+  out of qualifying glaciers; Asia 250, South America 250, North America 251.)
+- ✅ The per-file filter exists — `inference_data_query_250.sql`. Verified 2026-10-30:
+  **68,880 files across all 1,024 glaciers, 57.5 GB**, every file present in the bucket.
+- ❌ Inference has not been run on it. The only filtered file list on disk —
+  `filtered_inference_data.csv` — is still the *old* 50 vintage (245 glaciers).
 
-So the expansion's data is sitting in S3, catalogued, waiting for a filter query that was never
-written. Reconstructing it means adapting
-`identify_inference_glims_ids_geog_area_rollup_50.sql` — change `geog_size_rank <= 50` to `<= 250`
-and point it at the `_250` tables.
+It is two steps: the selection query picks glaciers, the filter query picks those glaciers' files.
+The filter restricts glaciers by **joining on the selection**, not by re-ranking. ⚠️ Don't take the
+shortcut of pointing `inference_data_query.sql` at the `_250` tables with `geog_size_rank <= 250`:
+the `_250` tables hold 77 glaciers beyond the 1,024, and ranking over that larger population
+swaps 23 glaciers in Asia and South America.
 
 ---
 

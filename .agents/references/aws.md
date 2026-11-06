@@ -39,8 +39,8 @@ all external over the prefixes above:
 `docs/low_level_design.md` lists mangled table names (`file_attributesee_metadata_full_time_series_250`) —
 the real names are the clean ones above. The committed SQL joins unqualified table names, so run it
 against `glacier-view` in us-west-1. `inference_data_query.sql` targets the `_full_time_series` (50)
-vintage. **No committed query selects the 250-per-region set**, even though its imagery and Athena
-tables exist — an empty placeholder file was removed rather than left to look like a real query.
+vintage. `inference_data_query_250.sql` targets the `_full_time_series_250` vintage, restricted by
+joining on the 1,024 glaciers chosen by `identify_inference_glims_ids_geog_area_rollup_250.sql`.
 
 ## Athena query history
 

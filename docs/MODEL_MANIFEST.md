@@ -133,6 +133,51 @@ Three candidate explanations, not distinguished:
    would mean the published figure is not comparable to what the current code
    reports.
 
+## Updated method (2026-11-11): the gap is in the evaluation, not the model
+
+> **This section supersedes the "Measured scores" conclusion above.** The
+> earlier text is kept as the record of how 0.8681 was measured.
+
+The 0.8681 above was measured with two choices that differ from how the model
+is actually used and how the paper scored it. `scripts/score_checkpoint.py`
+scores the same predictions under each choice. The slice is unchanged (the
+"test" half of `data/analysis/holdout_seed0.csv`, the 359 images above), and
+the script reproduces 0.8681 and 0.8261 exactly before changing anything.
+
+1. **Input scaling.** `GlacierDataset` applied the 2023 `train.py`'s
+   per-image min-max with `+1` added to the span, which puts the stored [0, 1]
+   stacks at roughly [0, 0.5]. Inference never does this. Both checkpoints
+   score clearly better without it, so neither was trained on it. The training
+   default is now `normalize=False`; the flag remains to reproduce old runs.
+2. **Metric.** On binary masks, `torchmetrics.Dice(average='micro')`
+   (torchmetrics < 1.9, as the original code used) is **pixel accuracy**: it
+   counts background agreement as well as ice overlap. That was verified
+   against a hand computation. Candidate explanation 3 above is confirmed.
+
+Dice on the 359-image slice, threshold 0.5, batches of 8:
+
+| Checkpoint | Inputs | Glacier Dice (this repo) | `torchmetrics` micro Dice (= pixel accuracy) |
+|---|---|---|---|
+| `unet_summer_model_unfrozen_100` | with the `+1` rescale (old measurement) | 0.8681 | 0.9023 |
+| `unet_summer_model_unfrozen_100` | **as at inference** | **0.9057** | **0.9309** |
+| `unet_2023-12-27` | with the `+1` rescale (old measurement) | 0.8261 | 0.8862 |
+| `unet_2023-12-27` | as at inference | 0.8683 | 0.9107 |
+
+Batch size moves any figure by at most 0.004 (full grid, including Jaccard
+and pooled scores, in the script's output).
+
+What this means:
+
+- **The published model's glacier-overlap Dice is about 0.906**, not 0.868.
+  The paper's 0.92 is most likely the pixel-accuracy figure (0.931 here).
+  The two numbers are not comparable, and the paper should say which it
+  reports.
+- **The caveat above still holds.** These images were probably in the training
+  data, so all four figures are upper bounds. The paper's own test split
+  cannot be rebuilt.
+- **Inference and published areas are unaffected.** Inference never applied
+  the rescale. Nothing needs retraining or re-running.
+
 ## Remaining unknowns
 
 1. What changed between the 2023-12-27 and 2024-10-02 checkpoints.

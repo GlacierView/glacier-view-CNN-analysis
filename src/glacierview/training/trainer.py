@@ -49,7 +49,8 @@ class TrainConfig:
     unfreeze_after_epoch: int | None = None
     shuffle: bool = True
     augment: bool = True
-    normalize: bool = True
+    # Off to match inference; see GlacierDataset.
+    normalize: bool = False
     seed: int | None = 0
     num_workers: int = 0
 

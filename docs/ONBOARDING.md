@@ -923,6 +923,15 @@ background agreement). Both plus 18 legacy Keras `.h5` files are backed up to
 `s3://segmentation-model-gv/checkpoints/` with a `MANIFEST.md`. Bucket
 versioning there is still off, so an overwrite is unrecoverable.
 
+> **Updated method (2026-11-11).** The 0.8681 / 0.8261 above were measured
+> with the training loader's old `+1` min-max rescale, which inference never
+> applies. Scored on inputs as at inference, the published model reaches
+> **glacier Dice 0.906** (the 2023 checkpoint: 0.868). The paper's 0.92 is
+> most likely `torchmetrics.Dice(average='micro')`, which on binary masks is
+> pixel accuracy (0.931 here). The training default is now `normalize=False`.
+> Details are in `docs/MODEL_MANIFEST.md`, "Updated method"; reproduce with
+> `scripts/score_checkpoint.py`.
+
 ### Training recipe
 
 The CLI defaults **are** the published recipe:

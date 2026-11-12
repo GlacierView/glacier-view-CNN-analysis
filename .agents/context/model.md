@@ -91,3 +91,13 @@ Ablations the paper records: 3,000 images without transfer learning 0.83 → wit
 0.86 → adding NDSI/NDWI 0.88 → full dataset with cross-entropy **0.92** (Dice loss gave 0.90).
 Frozen encoder 0.91 vs unfrozen 0.92. ResNet-50 beat ResNet-18 by 1–2%. Threshold sweep:
 0.1 → 0.16, 0.4 → 0.923, **0.5 → 0.926**, 0.8 → 0.87.
+
+**Updated method (2026-11-11): reading these Dice numbers.**
+- **The paper's figures are pixel accuracy.** It scored with `torchmetrics.Dice(average='micro')`,
+  which on binary masks equals pixel accuracy, so its numbers are not glacier-overlap Dice.
+- **Score on inputs as inference builds them.** That means `GlacierDataset(normalize=False)`, now the
+  default. The old `+1` rescale is what produced the 0.868.
+- **Measured on the 359-image slice:** the published model has glacier Dice **0.906** and pixel
+  accuracy 0.931. Both are upper bounds, since that slice likely overlaps training.
+- **Source and reproduction:** `docs/MODEL_MANIFEST.md`, "Updated method"; reproduce with
+  `scripts/score_checkpoint.py`.

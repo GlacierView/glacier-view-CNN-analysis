@@ -128,7 +128,7 @@ class GlacierDataset(Dataset):
         manifest: pd.DataFrame,
         data_dir: Path,
         augment: bool = False,
-        normalize: bool = True,
+        normalize: bool = False,
     ):
         self.manifest = manifest.reset_index(drop=True)
         self.data_dir = Path(data_dir)
@@ -158,8 +158,11 @@ class GlacierDataset(Dataset):
         image = torch.tensor(_to_chw(io.imread(img_path))).float()
 
         if self.normalize:
-            # Per-channel min-max onto [0, 1], driven by the image's own
-            # channel count rather than a hardcoded width.
+            # The 2023 train.py's per-image min-max. The +1 on the span puts
+            # the already-[0, 1] stacks at roughly [0, 0.5]. Inference never
+            # does this, and both checkpoints score better without it (Dice
+            # 0.906 vs 0.868 for the published one; scripts/score_checkpoint.py),
+            # so it is off by default and kept only to reproduce old runs.
             mins = [image[c].min() for c in range(image.shape[0])]
             spans = [
                 image[c].max() - image[c].min() + NORMALIZE_SMOOTHING

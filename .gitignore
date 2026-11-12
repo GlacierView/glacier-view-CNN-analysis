@@ -62,6 +62,7 @@ data/sample/inference/segmentation/
 # !figures/** so that .DS_Store stays ignored.
 !figures/*.png
 !figures/*.jpg
+!figures/*.gif
 !figures/*.drawio
 !figures/*.pgw
 !figures/inventory-examples/*.png

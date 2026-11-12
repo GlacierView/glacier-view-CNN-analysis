@@ -55,6 +55,27 @@ glaciers, the pointwise average, and the fitted log-linear trend.
 `asia-reg.png`, `caucausus-reg.png`, `europe-reg.png`,
 `north-america-reg.png`, `south-america-reg.png`.
 
+## Model output
+
+`largest_glaciers_by_region.gif` — the three largest glaciers (by GLIMS area)
+in each region of the 250-per-region set, one row per region, one frame per
+year 1984–2023. Each cell shows that glacier's latest scene up to the frame's
+year, with the model's mask (probability > 0.5) outlined and the binary area
+beneath. Each title gives the glacier's relative change, measured as for the
+figure below, and the years it spans. The set has no Oceania glaciers, so
+there are five rows.
+
+`most_shrinking_glaciers_by_region.gif` — the same layout, for the three
+glaciers per region that lost the largest share of their area: the mean of
+their last three annual areas over the mean of their first three (from
+`src/segmentation/areas_250/areas_binary_05.csv`), among glaciers observed
+over at least 25 years and in at least 10. The change and the years it spans
+are in each cell's title.
+
+The two GIFs are made by `scripts/region_gif_figure.py` (`--select largest` or
+`--select shrinkage`), which also writes each glacier's own GIF to
+`src/segmentation/gifs/by_region/`.
+
 ## Logos
 
 `earth-engine-logo.png`, `glims_logo_smooth.png` — for slides and diagrams.

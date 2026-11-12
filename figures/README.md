@@ -72,6 +72,15 @@ their last three annual areas over the mean of their first three (from
 over at least 25 years and in at least 10. The change and the years it spans
 are in each cell's title.
 
+`global_overview_stacked.{png,pdf}` — the paper's introduction figure, with
+panels above and below the map. An Equal Earth map of the 7,174 glaciers
+trained on (which include all 1,024 inference glaciers), coloured by region,
+and for each region the glacier with the largest relative area loss among
+those whose predicted starting area is over 10 km²: its earliest and latest
+outline, with the earliest dashed over the latest where the two scenes share a
+footprint. Made by `scripts/global_overview_figure.py`; the trained-on list is
+`data/analysis/trained_glims_ids.csv`, read from the training bucket.
+
 The two GIFs are made by `scripts/region_gif_figure.py` (`--select largest` or
 `--select shrinkage`), which also writes each glacier's own GIF to
 `src/segmentation/gifs/by_region/`.

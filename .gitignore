@@ -63,6 +63,7 @@ data/sample/inference/segmentation/
 !figures/*.png
 !figures/*.jpg
 !figures/*.gif
+!figures/*.pdf
 !figures/*.drawio
 !figures/*.pgw
 !figures/inventory-examples/*.png

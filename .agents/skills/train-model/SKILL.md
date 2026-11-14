@@ -35,8 +35,9 @@ paper's exact numbers therefore needs the old script from git history.
   model takes. The loader checks this per image and names the offending file.
 - Two tif vintages exist: the current set reads back as `(1, 128, 128, 7)`,
   an older one as `(128, 128, 8)`. The loader normalises both to channel-first.
-- The paper reports test Dice 0.92; the published checkpoint measures 0.868 on a re-drawn holdout
-  (`docs/MODEL_MANIFEST.md`). Full ablation trail in `.agents/references/paper.md`.
+- The paper reports test Dice 0.92; the published checkpoint measured 0.868 on a re-drawn holdout
+  with the old `+1` rescale (now off by default); `docs/MODEL_MANIFEST.md` gives glacier Dice 0.906
+  without it. The paper's 0.92 is pixel accuracy, not glacier Dice. Full ablation trail in `.agents/references/paper.md`.
 
 ## References
 

@@ -48,8 +48,9 @@ evidence behind excluding them from the training set:
 
 ## `regional-decline/`
 
-The published per-region regression figures, from
-`notebooks/analysis/regional_decline.ipynb`: estimated area for individual
+Per-region regression figures from
+`notebooks/analysis/regional_decline.ipynb` (these Python plots match only the paper's commented-out figure;
+the paper's active figure uses base-R plots from code not in this repo): estimated area for individual
 glaciers, the pointwise average, and the fitted log-linear trend.
 
 `asia-reg.png`, `caucausus-reg.png`, `europe-reg.png`,

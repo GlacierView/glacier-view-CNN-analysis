@@ -84,14 +84,15 @@ aws s3 cp s3://full-time-series-images-t1-l2-sr/G007026E45991N/ \
   --recursive --region us-west-1 --exclude "*/meta_data/*" --exclude "*.DS_Store"
 ```
 
-The whole bucket is 486 GB; the filtered inference set is 245 glaciers /
-14,952 files / 23.7 GB. Pull that subset. See `.agents/rules/data.md`.
+The whole bucket is 486 GB; the filtered inference set is 1,024 glaciers /
+68,880 files (`filtered_inference_data_250.csv`). Pull that subset. See `.agents/rules/data.md`.
 
 ## Verifying it worked
 
-Trient (`G007026E45991N`) is the documented regression case: 464 images,
-1984-04-18 to 2023-10-07, decline concentrated in 1985–1988 and 2002–2015,
-roughly stable over the last decade.
+Trient (`G007026E45991N`) is the documented regression case. The paper reports 464
+images (1984-04-18 to 2023-10-07), but the current code gives 1,748 scenes on the committed sample
+and 62 in the filtered run; 464 is reproduced only if Landsat 8 is included, so do not use it as a
+check.
 
 ## References
 

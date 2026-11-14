@@ -67,8 +67,8 @@ def build_inputs(
     stack, file_names, original_sizes = prepare_glacier_stack(
         glacier_dir, dem_path, filtered_file_path=filtered_file_path
     )
-    # A scene with no valid pixels normalises to NaN; fill from the rest of
-    # the stack rather than letting it reach the model.
+    # Guard against NaN reaching the model (fill from the rest of the stack).
+    # An all-nodata scene normalises to zeros, not NaN, so this is a safeguard.
     stack = np.nan_to_num(stack, nan=float(np.nanmean(stack)))
 
     # Smooth along time only — each pixel against itself on neighbouring

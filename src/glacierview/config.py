@@ -62,7 +62,7 @@ DEFAULT_DATA_LABEL = os.environ.get("GV_DATA_LABEL", INFERENCE_DATA_LABEL)
 # Model and preprocessing constants
 # --------------------------------------------------------------------------- #
 
-#: The model's fixed input resolution.
+#: The resolution the model was trained on; inputs are resized to this.
 MODEL_INPUT_DIM = (128, 128)
 #: Probability above which a pixel counts as glacier.
 PROB_THRESHOLD = 0.5

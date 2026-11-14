@@ -2,7 +2,9 @@
 
 Cross-entropy is the published choice: it penalises how wrong a prediction is,
 not just whether it is wrong, which suits blurry ice/rock boundaries. Dice
-loss is kept because the paper compared against it (0.90 vs 0.92 Dice).
+loss is kept because the paper compared against it (0.90 vs 0.92; those
+figures are `torchmetrics.Dice(average='micro')`, i.e. pixel accuracy on
+binary masks, not glacier-overlap Dice).
 
 The Dice implementations are adapted from a commonly circulated reference
 implementation; the original script credited it only as "source".

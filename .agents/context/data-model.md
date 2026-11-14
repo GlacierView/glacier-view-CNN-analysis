@@ -51,9 +51,9 @@ Two points about time that are easy to get wrong:
   `gaussian(X, sigma=[20,0,0,0], mode='reflect')` — σ = 20 *time points*, smoothing each pixel
   across the glacier's time series to reduce noise.
 
-⚠️ The two inference scripts disagree on where smoothing happens, and the paper sides with
-`infer.py`: the paper smooths first and computes NDSI/NDWI on the smoothed stack (as `infer.py`
-does), while `glacierview areas` computes the indices first and then smooths everything including them.
+`infer`, `areas` and `areas-s3` all call `segment_glacier` -> `build_inputs`, which smooths first and
+then computes NDSI/NDWI on the smoothed stack, as the paper describes. (The 2024 `final_areas.py`
+computed the indices first and then smoothed everything including them.)
 
 ⚠️ Reprojection direction also differs: the paper says the *rasters* were reprojected to WGS 84 to
 match the polygons, while notebook 09 reprojects the *polygons* into each raster's UTM CRS.

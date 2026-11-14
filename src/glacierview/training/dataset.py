@@ -141,8 +141,8 @@ class GlacierDataset(Dataset):
     def _augment(self, image, label):
         """Flip and blur, each independently at p=0.5.
 
-        Applying all three every time would quadruple the data; independent
-        coin flips grow it ~75% while still covering the combinations.
+        Each sample is replaced by one transformed copy, so the dataset does
+        not grow; independent coin flips cover the combinations of the three.
         """
         if random.random() > 0.5:
             image, label = TF.vflip(image), TF.vflip(label)

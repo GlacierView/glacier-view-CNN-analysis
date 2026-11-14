@@ -20,7 +20,8 @@ Input is (N, IN_CHANNELS, 128, 128), channels in this order:
     5 nir    6 swir   7 thermal   8 DEM
 
 `swir_2` is deliberately excluded for quality reasons. The two spectral indices
-are derived from the raw bands and prepended by the caller.
+are derived from the scaled bands (at inference, after time smoothing) and
+prepended by the caller.
 """
 
 import torch
@@ -66,8 +67,9 @@ class UNet(
 
     Args:
         n_class: number of output classes (2: background, glacier).
-        freeze_encoder: if True, hold the pretrained ResNet weights fixed and
-            train only the replaced stem and the decoder.
+        freeze_encoder: if True, hold the pretrained ResNet weights fixed (BatchNorm
+            running statistics still update in training mode) and train only the
+            replaced stem and the decoder.
         pretrained_encoder: if True, start the encoder from ImageNet weights,
             which downloads them. Pass False when the weights are about to be
             overwritten by a checkpoint; `from_pretrained` does this via the
@@ -84,7 +86,8 @@ class UNet(
         # removed, leaving eight sequential stages.
         resnet = models.resnet50(weights='ResNet50_Weights.DEFAULT' if pretrained_encoder else None)
         if freeze_encoder:
-            # Skip index 0: the stem is replaced below and must stay trainable.
+            # Index 0 is the original 3-channel conv1, discarded below; the replacement
+            # is created afterwards and is trainable.
             for i, param in enumerate(resnet.parameters()):
                 if i != 0:
                     param.requires_grad = False

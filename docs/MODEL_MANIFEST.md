@@ -47,7 +47,7 @@ Saved with `torch.save(model)` — a **pickled module referencing `__main__.UNet
 | architecture | U-Net, ResNet-50 encoder (ImageNet weights), last two ResNet layers removed |
 | input | (N, 9, 128, 128), values normalized to [0,1] |
 | output | 2-class logits; glacier probability = softmax(...)[:,1], threshold 0.5 |
-| training set | 7,174 images (one temporal composite per glacier) → 6,456 train / 359 eval / 359 test |
+| training set | 7,174 images (one single scene per glacier, not a composite) → 6,456 train / 359 eval / 359 test |
 | augmentation | vflip, hflip, 3x3 Gaussian blur (sigma 0.8), each independently at p=0.5 → 11,298 images |
 | learning rate | 0.00001 |
 | batch size | 32 |

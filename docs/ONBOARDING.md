@@ -435,11 +435,18 @@ Notebook 10 (`build_training_pair`) then assembles the trainable pairs: take the
 select the common bands, normalize, resize everything to 128×128, stack the DEM on as a final
 channel, and write matched `images/` and `masks/` tifs.
 
-**One step the paper documents that's easy to miss: training images are temporal composites, not
-single scenes.** All Landsat scenes within a **±100-day window** of the GLIMS `src_date` (the
-outline's as-of date) were downloaded and combined by **arithmetic mean**, to average away shadows,
-debris and transient defects. So "one training image per glacier" means one *averaged* image, built
-from however many scenes happened to be available in that window — which varies per glacier.
+**Training images are single scenes, not temporal composites.** Notebook 03 downloads every Landsat
+scene within **±50 days** of the GLIMS `src_date` (the outline's as-of date), a 100-day window. The
+training SQL then keeps exactly one of them per glacier: the most recent scene that passes the cloud,
+quality and pixel filters (`rank_score = 1`), and only if it falls in a low-snow month. Notebook 10
+builds each training image from that one file, and names the output after it. So "one training
+image per glacier" means one dated scene. Shadows, debris and defects are avoided by choosing a
+clean scene, not by averaging.
+
+⚠️ The paper's Section III says the scenes in the window were "averaged across time using an
+arithmetic mean". No code does this, and the paper's own abstract says the model was trained on
+images "each at only one time point". The averaging sentence should be removed from the paper. The
+only temporal smoothing in the project is the Gaussian filter applied at *inference* (Stage 7).
 
 The paper also describes reprojecting the **rasters** to WGS 84 to match the polygons, whereas
 notebook 09 reprojects the **polygons** into each raster's UTM CRS. Same goal, opposite
@@ -1256,6 +1263,10 @@ When sources disagree, this is the precedence order:
 
 - ~~Which channels was the model trained on?~~ **Nine**: NDWI, NDSI, blue, green, red, nir, swir,
   thermal, DEM. `swir_2` was dropped for quality. Confirmed directly against both checkpoints.
+- ~~Are training images temporal composites?~~ **No.** The paper's Section III says scenes in the
+  100-day window were averaged by arithmetic mean, but the training SQL keeps one scene per glacier
+  and no code composites. The paper's abstract ("each at only one time point") agrees with the
+  code. The window is ±50 days, not ±100.
 - ~~Where are the four analysis CSVs?~~ Recovered, now in `data/analysis/`.
 - ~~Where is the 1,083-glacier areas output?~~ **Recovered**:
   `data/analysis/areas_binary_05_filtered_smooth_f.xlsx`, 1,085 glacier columns. Replicating the

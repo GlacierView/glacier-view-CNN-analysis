@@ -38,11 +38,15 @@ Bucket inventory and the Athena catalog: `.agents/references/aws.md`.
   treated as sensor artifacts and replaced) — not a plain min-max.
 - Everything is resized to 128×128 before the model and resized back afterwards for area.
 
-Two steps the paper documents that are easy to miss in the code:
+Two points about time that are easy to get wrong:
 
-- **Training images were temporally averaged.** All Landsat scenes within a ±100-day window of the
-  GLIMS `src_date` (the outline's as-of date) were pulled and combined by arithmetic mean, to
-  suppress shadows, debris and defects. So one training image is a composite, not a single scene.
+- **Each training image is a single scene, not a temporal composite.** The training pull fetched
+  every Landsat scene within ±50 days of the GLIMS `src_date` (a 100-day window), but
+  `sql/training_data_query.sql` keeps only the most recent qualifying scene per glacier
+  (`rank_score = 1`), and `build_training_pair` reads that one file. Nothing averages scenes.
+  ⚠️ The paper's Section III claims the window's scenes were "averaged across time using an
+  arithmetic mean"; that is wrong, and contradicts the paper's own abstract ("each at only one time
+  point").
 - **Inference applies a Gaussian filter along the time axis**, not in space:
   `gaussian(X, sigma=[20,0,0,0], mode='reflect')` — σ = 20 *time points*, smoothing each pixel
   across the glacier's time series to reduce noise.

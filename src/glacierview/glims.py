@@ -35,6 +35,10 @@ EXCLUDED_REGIONS = (
     "Antarctic Peninsula",
     "Various (NSIDC)",
 )
+#: Regions the training and inference SQL leave out (``geog_area != 'Canada'``). GLIMS's
+#: "Canada" centre holds only high-Arctic glaciers (80.6-83.1 N, Ellesmere Island), too far
+#: north for NASADEM.
+INFERENCE_EXCLUDED_REGIONS = ("Canada",)
 #: How much to pad a glacier's envelope, so the scene shows its surroundings.
 BBOX_SCALE = 1.1
 
@@ -80,6 +84,24 @@ def read_selection(path: Path | None = None) -> gpd.GeoDataFrame:
     return gpd.read_file(path or config.glims_selection_path())
 
 
+def recent_regional_outlines(inventory: pd.DataFrame) -> pd.DataFrame:
+    """The outlines drawn after `MIN_OUTLINE_DATE` outside `EXCLUDED_REGIONS`, any size.
+
+    The paper's selection before its area filter; a glacier may still have several outlines.
+    """
+    outline_date = pd.to_datetime(inventory["src_date"].str.split("T").str[0])
+    steps = {
+        f"outlined after {MIN_OUTLINE_DATE:%Y-%m-%d}": outline_date > MIN_OUTLINE_DATE,
+        "not a catch-all region": ~inventory["geog_area"].isin(EXCLUDED_REGIONS),
+    }
+    logger.info("%d glaciers in the inventory", inventory["glac_id"].nunique())
+    selected = inventory
+    for label, keep in steps.items():
+        selected = selected[keep.loc[selected.index]]
+        logger.info("%d %s", selected["glac_id"].nunique(), label)
+    return selected
+
+
 def select_glaciers(inventory: pd.DataFrame) -> pd.DataFrame:
     """Narrow the inventory to recent, typical, regionally-specific glaciers.
 
@@ -87,18 +109,10 @@ def select_glaciers(inventory: pd.DataFrame) -> pd.DataFrame:
     keeps areas strictly inside `AREA_RANGE_KM2`, then keeps the first outline
     of any glacier GLIMS has outlined more than once.
     """
-    outline_date = pd.to_datetime(inventory["src_date"].str.split("T").str[0])
+    selected = recent_regional_outlines(inventory)
     low, high = AREA_RANGE_KM2
-    steps = {
-        f"outlined after {MIN_OUTLINE_DATE:%Y-%m-%d}": outline_date > MIN_OUTLINE_DATE,
-        "not a catch-all region": ~inventory["geog_area"].isin(EXCLUDED_REGIONS),
-        f"{low}-{high} km^2": inventory["db_area"].between(low, high, inclusive="neither"),
-    }
-    logger.info("%d glaciers in the inventory", inventory["glac_id"].nunique())
-    selected = inventory
-    for label, keep in steps.items():
-        selected = selected[keep.loc[selected.index]]
-        logger.info("%d %s", selected["glac_id"].nunique(), label)
+    selected = selected[selected["db_area"].between(low, high, inclusive="neither")]
+    logger.info("%d %s-%s km^2", selected["glac_id"].nunique(), low, high)
     return selected.drop_duplicates("glac_id", keep="first").reset_index(drop=True)
 
 

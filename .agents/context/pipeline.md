@@ -7,7 +7,12 @@ Data flows in one direction; each stage writes files that the next stage reads.
    and write the shapefile plus `data/glims_18k.parquet` for Athena.
 2. **Earth Engine pull** — notebooks 03–05 drive `glacierview.earthengine.EePull`, which downloads
    one GeoTIFF per image via `geemap.ee_export_image` at 30 m scale, plus a NASADEM per glacier.
-   Server-side filters: `CLOUD_COVER <= 10`, `IMAGE_QUALITY == 9` (`IMAGE_QUALITY_OLI` for L8).
+   The code today filters server-side on `CLOUD_COVER <= 10` and `IMAGE_QUALITY == 9`
+   (`IMAGE_QUALITY_OLI` for L8), but those filters were added for the September 2024 inference pull.
+   The **training** pull (2023, ±50 days of `src_date`) ran without them: of its 313,766 scenes,
+   200,324 have cloud cover > 10 (up to 100) and 18,122 have quality < 9 (L5/L7 only). Cloud and
+   quality are first enforced for training in the SQL (stage 4), so re-running notebook 03 with the
+   current code would download a subset of the original scenes.
    Each image's `getInfo()` JSON is appended to `meta_data/metadata_list_l{5,7,8}` alongside the tifs,
    and a log line per image goes to the run log.
 3. **Metadata relationalization** — notebooks 06 (training) and 07 (inference) drive

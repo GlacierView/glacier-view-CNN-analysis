@@ -37,7 +37,6 @@ src/earth_engine/src/data/
 src/segmentation/inference/helpers/__pycache__/
 
 
-
 # Trained model checkpoints — too large for GitHub (100MB limit).
 # Backed up to s3://segmentation-model-gv/checkpoints/ ; see src/segmentation/MODEL_MANIFEST.md
 src/segmentation/unet_summer_model_unfrozen_100
@@ -53,6 +52,9 @@ src/segmentation/unet_summer_model_unfrozen_100
 # smoke tested without the full 9.3 GB set, and every Trient scene, so
 # inference runs with no S3 download. See data/sample/inference/README.md.
 !data/sample/**
+# The line above re-includes everything under data/sample, .DS_Store too, and
+# later rules win, so ignore .DS_Store again here.
+data/sample/**/.DS_Store
 # Inference run with GV_DATA_ROOT=data/sample/inference and no --out-dir.
 data/sample/inference/segmentation/
 

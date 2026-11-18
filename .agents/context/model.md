@@ -54,9 +54,16 @@ needs the same names injected first. Consequences:
 - Output: 2-class logits (glacier / background, complementary). Probability is
   `softmax(...)[:, 1]`, thresholded at 0.5.
 - Area = `mask.sum() * 0.0009` km² (30 m × 30 m pixels), computed **after** resizing the prediction
-  back to the image's original dimensions.
-- NDSI/NDWI are computed from the raw band stack at fixed indices (`green=ch1`, `nir=ch3`,
-  `swir=ch4`) then *prepended*, NDSI first and NDWI second — so NDWI lands at index 0.
+  back to a 30 m grid: the glacier's reference grid (`--preprocessing current`), or each scene's own
+  grid (`published`).
+- NDSI/NDWI are computed from the band stack at `COMMON_BANDS` positions (`green=ch1`, `nir=ch3`,
+  `swir=ch4`) then *prepended*, NDSI first and NDWI second — so NDWI lands at index 0
+  (`preprocess.add_spectral_indices`). The published checkpoint was trained with
+  `(a - b + eps) / (a + b + eps)` (`legacy=True`); the current pipeline uses `(a - b) / (a + b + eps)`.
+- **The published checkpoint's inputs are reproduced only by `--preprocessing published`.** The
+  default, `current`, changes scaling, grid, fill handling and the index formula, so it needs a model
+  retrained on a set rebuilt with notebooks 09–10. With the published checkpoint it scores Dice 0.848
+  on the 100 sample glaciers, against 0.870 with `published`.
 
 ### Two checkpoints exist
 

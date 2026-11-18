@@ -1,8 +1,12 @@
 """Build the training set: GLIMS outlines -> masks, and scene + DEM + mask -> pairs.
 
-Notebook 09 calls `rasterize_outline` once per glacier; notebook 10 calls
+Notebook 09 calls `rasterize_outline` once per glacier. Notebook 10 calls
 `build_training_pair` once per chosen scene and writes the result to
 `glacierview.config.training_set_dir`.
+
+Scene, DEM and mask all go on the glacier's `rasters.reference_grid`, the same
+grid inference uses. So a label pixel covers the same ground as the image
+pixel under it, whichever UTM zone the training scene came in.
 """
 
 from __future__ import annotations
@@ -11,51 +15,59 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
-import rasterio
 from PIL import Image
-from rasterio.mask import mask
+from rasterio.features import rasterize
 from shapely.geometry.base import BaseGeometry
 
 from glacierview import config
 from glacierview import rasters as raster_io
-from glacierview.preprocess import get_common_bands, normalize_rasters, resize_rasters
-
-_OUTSIDE = -999
+from glacierview.preprocess import fill_missing, prepare_dem, prepare_scene, resize_rasters
 
 
 def rasterize_outline(
-    scene_path: Path, outline: BaseGeometry, outline_crs: str = "EPSG:4326"
+    grid: raster_io.Grid, outline: BaseGeometry, outline_crs: str = "EPSG:4326"
 ) -> np.ndarray:
-    """A binary mask of ``outline`` on the scene's pixel grid (1 = glacier).
+    """A binary int32 mask of ``outline`` on `grid` (1 = glacier).
 
-    The outline is reprojected into the scene's CRS first: scenes arrive in
-    UTM, and the same glacier can fall in different zones on different dates.
+    Pass the glacier's ``rasters.reference_grid(dem_path)``. A pixel is glacier
+    if its centre falls inside the outline.
     """
-    with rasterio.open(scene_path) as src:
-        shape = gpd.GeoSeries([outline], crs=outline_crs).to_crs(src.crs).iloc[0]
-        masked, _ = mask(src, [shape], nodata=_OUTSIDE)
-    return np.where(masked[0] == _OUTSIDE, 0, 1).astype(masked.dtype)
+    shape = gpd.GeoSeries([outline], crs=outline_crs).to_crs(grid.crs).iloc[0]
+    return rasterize(
+        [shape], out_shape=grid.shape, transform=grid.transform,
+        fill=0, default_value=1, dtype="int32",
+    )
 
 
 def build_training_pair(
     scene_path: Path, dem_path: Path, mask_path: Path
 ) -> tuple[np.ndarray, np.ndarray]:
-    """One model-ready image and its label.
+    """One model-ready image and its label, preprocessed exactly as at inference.
+
+    The scene goes onto the reference grid, is clipped to the fixed cut-offs and
+    scaled, and has its fill masked. The DEM goes through `prepare_dem`. Inference
+    fills missing pixels from neighbouring dates, but a training pair is a single
+    date, so whatever is missing takes the scene's mean (`fill_missing`).
 
     Returns:
-        image: (1, 128, 128, 7) — the six `COMMON_BANDS` then the DEM.
+        image: (1, 128, 128, 7) float32: the six `COMMON_BANDS`, then the DEM.
         label: (128, 128, 1).
 
-    The DEM is normalised *before* resizing here, the reverse of
-    `preprocess.prepare_glacier_stack`; both orders are as the published
-    model was trained and run, so they are kept.
+    Raises:
+        ValueError: if the mask isn't on the reference grid. Masks from before
+            the grid existed were drawn on one scene's grid. Rebuild them with
+            notebook 09.
     """
-    scene_path = Path(scene_path)
-    scenes = raster_io.get_rasters(scene_path.parent, file_name=scene_path.name)
-    scenes = resize_rasters(normalize_rasters(get_common_bands(scenes, list(config.COMMON_BANDS))),
-                            config.MODEL_INPUT_DIM)
-    dem = resize_rasters(normalize_rasters(raster_io.get_dem(dem_path)), config.MODEL_INPUT_DIM)
-    label = resize_rasters({"mask": np.array(Image.open(mask_path))[..., np.newaxis]},
-                           config.MODEL_INPUT_DIM)["mask"]
-    image = np.stack([np.concatenate((scene, *dem.values()), axis=2) for scene in scenes.values()])
+    grid = raster_io.reference_grid(dem_path)
+    scene = prepare_scene(scene_path, grid)
+    dem = prepare_dem(dem_path, grid)
+    image = fill_missing(np.concatenate((scene, dem), axis=2)[np.newaxis])
+
+    label = np.array(Image.open(mask_path))
+    if label.shape != grid.shape:
+        raise ValueError(
+            f"{mask_path} is {label.shape}, but the reference grid is {grid.shape}; "
+            f"it predates the grid. Rebuild the masks with notebook 09."
+        )
+    label = resize_rasters({"mask": label[..., np.newaxis]}, config.MODEL_INPUT_DIM)["mask"]
     return image, label

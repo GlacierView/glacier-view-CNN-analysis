@@ -4,9 +4,11 @@ Checked by diffing local inventories against the buckets.
 
 **Present and complete:**
 
-- Ready-to-train data — `training/data/processed_training_data_summer_months/` holds 7,174 images +
-  8,902 masks, an exact mirror of `training-images-t1-l2-sr`. `glacierview train` reads it from
-  `config.training_set_dir()` by default, so it trains on this with no flags.
+- Published training data — `training/data/processed_training_data_summer_months/` holds 7,174
+  images + 8,902 masks, an exact mirror of `training-images-t1-l2-sr`. It is
+  `config.published_training_set_dir()`: what the published checkpoint was trained on, built by the
+  published preprocessing. `glacierview train` no longer reads it by default (see "Preprocessing
+  rebuilt" below); pass it as `--data-dir` with `--normalize` to reproduce published training.
 - Raw training data — 18,093 glacier dirs of imagery and DEMs under
   `localized_time_series_for_training_c02_t1_l2/`, plus `masks_staging_2/`. That is 148 glaciers *more*
   than `raw-training-images-t1-l2-sr` holds (see "unbacked" below).
@@ -30,6 +32,95 @@ Checked by diffing local inventories against the buckets.
   `np.float64(...)` reprs that overflowed the shapefile's 254-character field, corrupting 17,354 of
   18,093 `bboxes`. `glims.add_bounding_boxes` writes plain floats, and the shapefile is regenerated
   and verified against `data/glims_18k.parquet`.
+
+**Open issues** (found 2026-10-23; all affect what the results mean; fixes are marked):
+
+- **Training and inference see inputs at different scales.** `GlacierDataset` (used by
+  `glacierview train` and by the 0.868 Dice measurement) min-max normalises images that notebook 10
+  already normalised, with `NORMALIZE_SMOOTHING = 1` added to each range, so bands land in ~[0, 0.5].
+  Inference (`preprocess.prepare_glacier_stack`) feeds ~[0, 1]. The original `train.py` did the same,
+  so the published checkpoint was trained at half scale, yet on the 100 committed sample glaciers it
+  scores Dice **0.870 at inference scale vs 0.821 at training scale**. **Fixed in code 2026-11-02:**
+  `TrainConfig.normalize` now defaults to off, so a retrained model sees [0, 1] like inference. The
+  published checkpoint is unchanged.
+- **The inference glaciers were in the training set.** All 1,024 glaciers of the 250-per-region
+  selection, and 222 of the 245 in `filtered_inference_data.csv`, are among the 7,174 trained on (by
+  construction: the `identify_inference_*` queries read the training tables). Accuracy on them is
+  in-sample; only those 23 are unseen. The 0.868 holdout may also overlap training, since the
+  original split was never saved.
+- ~~`glacierview infer` / `areas` apply no quality filter~~ — fixed 2026-11-02. Both now use only the
+  scenes listed in `config.filtered_inference_path()` (`filtered_inference_data.csv`) when it exists,
+  and `areas` skips glaciers with no listed scene. `--filter-csv` picks another file and `--no-filter`
+  uses everything on disk. The committed sample carries its own copy of the CSV's rows for its
+  scenes, so it runs Trient on 62 scenes by default, or on all 1,733 with `--no-filter`.
+- ~~The DEM is preprocessed in a different order in training and inference~~ — fixed 2026-11-02 for
+  the current pipeline: `preprocess.prepare_dem` is shared. `--preprocessing published` keeps the
+  old orders.
+- **Some training pairs on disk come from older masks.** `masks_staging_2/` has 17,946 masks, the
+  training set 8,902; e.g. `G079924E35890N`'s pair differs from a rebuild. Rerunning notebooks 09–10
+  will change some pairs.
+- **Time smoothing** is `config.TIME_SMOOTHING_SIGMA` = 2 frames for `current`, down from 20.
+  `gif_smoothing.ipynb` shows that sigma 20 flattens the seasonal cycle. `published` always uses
+  `config.PUBLISHED_TIME_SMOOTHING_SIGMA` = 20.
+- **Preprocessing rebuilt (2026-11-02); the published checkpoint needs `--preprocessing published`
+  until a model is retrained.** `glacierview.preprocess` now has two pipelines. `current` is the
+  default for `infer`, `areas` and notebook 10's training pairs; `published` reproduces exactly what
+  the published checkpoint saw (verified: identical Trient areas with `--no-filter`, Dice 0.870 on the 100 sample
+  glaciers). What `current` fixes:
+  - **Scenes and DEM weren't on one grid.** Earth Engine returns each scene in its path/row's UTM zone
+    and the DEM in EPSG:4326, each resized to 128×128 on its own. Trient's scenes come on two grids
+    (816 in zone 31 at 179×108, 932 in zone 32 at 177×103) that sit 128 m apart (median; up to
+    287 m) at 128×128. The time smoothing averaged across both. Its DEM was off by a median 270 m
+    (up to 690 m), in training too, and each training mask was drawn on the glacier's *first*
+    scene's grid, not necessarily the grid of the scene it was paired with. Now everything goes onto
+    `rasters.reference_grid` (30 m UTM over the DEM's extent, snapped to Landsat's pixel phase, so a
+    scene in that zone is copied exactly), and areas are measured on that grid. The grid covers the
+    glacier's padded box rather than each scene's larger UTM box, so neighbouring ice outside the
+    box no longer counts.
+  - **Fill read as ice.** DN 0 fill scaled to 0 in every band and to 200 K in thermal, and the old
+    index formula `(a - b + eps) / (a + b + eps)` turned 0/0 into NDSI = NDWI = +1. Fill is common:
+    from `band_distributions.ipynb` (200 training scenes per satellite), Landsat 7 is 27% fill
+    (likely the post-2003 SLC-off stripes) and thermal 14–31% on every satellite. Fill is now NaN,
+    resized and time-smoothed with NaN left out (so a stripe is filled from neighbouring dates),
+    then filled with the frame mean. NDSI/NDWI use `(a - b) / (a + b + eps)`.
+  - **Scaling.** Bands are clipped to `bands.CUTOFFS_DN` and scaled to [0, 1]: reflectance 0–1
+    (DN 7,273–43,636; a 60,000 top was tried, and clipping at 1 gave better scaled values) and
+    thermal 200–320 K (DN 14,921–50,029). Saturation (Landsat 5/7 visible bands at DN 65535 over
+    snow: 57% of Landsat 5 blue pixels, 31–41% of Landsat 7 visible) lands at 1, the same as any
+    reflectance ≥ 1. Landsat 8 doesn't saturate. `QA_RADSAT` is still unused.
+  - **Memory.** Only the six bands are read, one scene at a time, so the peak no longer grows with
+    glacier footprint. Trient's full series peaks at 3.7 GB, against 6.8 GB for `published`.
+  - **Smaller:** bands are selected in `COMMON_BANDS` order (`preprocess.band_indexes`) rather than
+    relying on the native order matching; index positions derive from `COMMON_BANDS`; resizes set
+    `antialias=True` explicitly.
+  
+  **What it costs until retraining.** The published checkpoint on `current` inputs scores Dice 0.848
+  on the 100 sample glaciers (against masks rasterised on the reference grid), the same as
+  cut-offs-only scaling gave (L5 0.873→0.855, L7 0.827→0.811, L8 0.883→0.840 for that change), so
+  the grid alignment didn't cost it anything. On all 1,733 Trient scenes, the series reads
+  5.85 → 5.79 km² (`current`, sigma 2) instead of 7.41 → 6.31 km² (`published`, sigma 20). The
+  table of settings is in `data/sample/inference/README.md`. To retrain:
+  1. Rebuild masks with notebook 09. They now go to `config.masks_dir()` (`masks_reference_grid/`);
+     the old ones in `masks_staging_2/` have no S3 copy and are untouched.
+  2. Rebuild pairs with notebook 10, into `config.training_set_dir()`
+     (`processed_training_data_reference_grid/`).
+  3. Run `glacierview train`. `build_training_pair` refuses an old scene-grid mask.
+- **Display:** `scene_viewer.ipynb` gives a saturated visible band the brightest unsaturated
+  visible band's value, since snow is near-neutral in the visible; otherwise saturated blue tints
+  snow pink.
+- ~~Early Landsat 5 blue band~~ — handled 2026-11-02. From launch until November 1984, Landsat 5's
+  blue band reads about 45% low over snow. The blue/green ratio over unsaturated snow is 0.52–0.63
+  through August 1984, recovers through October, and is ~0.95–1.0 from early November, on all 16
+  glaciers checked across five regions; every later period on every satellite is 0.94–1.03. USGS
+  documents that the 1984–1991 calibration had the largest corrections (gains up to 15%, bands 1–2
+  rescaled), but nothing describes an error this large. `config.FIRST_VALID_DATE` (1984-11-01) is
+  now enforced by `EePull`, by inference (`rasters.list_scenes(since=...)`), by all four filtering
+  queries in `sql/`, and by the analysis notebook (`START = None` reproduces the published numbers).
+  Applying it moves the published weighted slopes: North America −0.0398 → −0.0277, Europe
+  −0.1054 → −0.1092, South America −0.0836 → −0.0793, Asia −0.0552 → −0.0540, Caucausus
+  −0.0654 → −0.0642. The data already on S3 and the Athena tables still include the early scenes.
+- **Notebooks 03–05 hardcode a personal Earth Engine Cloud project** (`psyched-upgrade-377000`).
+  Anyone else must substitute theirs.
 
 **Missing, regenerable:** `areas_no_threshold.csv`, `areas_05_thresh.csv`, `areas_binary_05.csv` are
 outputs `glacierview areas` creates on startup.

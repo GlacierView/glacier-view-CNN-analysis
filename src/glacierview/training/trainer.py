@@ -49,7 +49,8 @@ class TrainConfig:
     unfreeze_after_epoch: int | None = None
     shuffle: bool = True
     augment: bool = True
-    # Off to match inference; see GlacierDataset.
+    # Off: images are already scaled to [0, 1] by `build_training_pair`, as at
+    # inference. The published model was trained with it on (inputs ~[0, 0.5]).
     normalize: bool = False
     seed: int | None = 0
     num_workers: int = 0

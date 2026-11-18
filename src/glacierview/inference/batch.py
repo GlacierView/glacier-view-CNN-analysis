@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 from glacierview import config
+from glacierview import rasters as raster_io
 from glacierview.inference import render
 from glacierview.inference.predict import AREA_VARIANTS, segment_glacier
 from glacierview.log import get_logger
@@ -99,14 +100,16 @@ def run(
     write_gifs: bool = True,
     filtered_file_path: Path | str | None = None,
     skip_done: bool = False,
+    preprocessing: str = "current",
 ) -> dict:
     """Process the landing zone. Returns a summary dict.
 
     Args:
-        filtered_file_path: CSV with a ``file_name`` column; only those scenes
-            are segmented.
+        filtered_file_path: as for `inference.predict.build_inputs`. Glaciers
+            with no scene in it are left out of the run.
         skip_done: skip glaciers that already have a per-glacier CSV in
             ``out_dir``. They are counted in ``skipped``, not ``succeeded``.
+        preprocessing: as for `inference.predict.build_inputs`.
     """
     landsat = config.landsat_dir(data_label)
     if not landsat.is_dir():
@@ -116,6 +119,15 @@ def run(
         glims_ids = sorted(
             d.name for d in landsat.iterdir() if d.is_dir() and not d.name.startswith(".")
         )
+        if filtered_file_path:
+            # A glacier with no scene in the filter isn't part of the run;
+            # leave it out rather than count it as a failure.
+            listed = set(pd.read_csv(filtered_file_path)["glims_id"])
+            not_listed = [g for g in glims_ids if g not in listed]
+            glims_ids = [g for g in glims_ids if g in listed]
+            if not_listed:
+                logger.info("%d glaciers on disk have no scene in the filter; skipped",
+                            len(not_listed))
     if not glims_ids:
         raise FileNotFoundError(f"{landsat} contains no glacier directories")
 
@@ -135,6 +147,7 @@ def run(
                     model, glims_id, device, data_label,
                     variants=tuple(AREA_VARIANTS),
                     filtered_file_path=filtered_file_path,
+                    preprocessing=preprocessing,
                 )
             except Exception:
                 failures.append(glims_id)
@@ -154,6 +167,14 @@ def run(
                     file_names=result["file_names"],
                     stride=10,
                     overlay=True,
+                    ground_truth=(render.ground_truth_mask(
+                        glims_id, config.dem_path(glims_id, data_label))
+                        if preprocessing == "current" else None),
+                    areas=result["areas"]["binary"],
+                    missing=result["missing"],
+                    scenes_dir=config.glacier_dir(glims_id, data_label),
+                    grid=(raster_io.reference_grid(config.dem_path(glims_id, data_label))
+                          if preprocessing == "current" else None),
                 )
             logger.info("[%d/%d] %s", i, len(glims_ids), glims_id)
     finally:

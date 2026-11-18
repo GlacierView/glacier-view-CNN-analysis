@@ -23,6 +23,9 @@ from glacierview.log import configure, get_logger
 
 logger = get_logger(__name__)
 
+#: Mirrors `glacierview.preprocess.PREPROCESSING`; kept here so that parsing
+#: arguments doesn't import torch.
+PREPROCESSING_CHOICES = ("current", "published")
 CHECKPOINT_HELP = (
     "a checkpoint file, an exported directory, or a Hugging Face repo id "
     "(e.g. GlacierView/glacierview-unet, or ...@v1-paper to pin a version)"
@@ -60,6 +63,8 @@ def cmd_config(args) -> int:
         "glims_selection": config.glims_selection_path(),
         "masks": config.masks_dir(),
         "training_set": config.training_set_dir(),
+        "published_masks": config.published_masks_dir(),
+        "published_training_set": config.published_training_set_dir(),
         "analysis_data": config.ANALYSIS_DIR,
         "sample_inference": config.SAMPLE_INFERENCE_ROOT,
         "sql": config.SQL_DIR,
@@ -72,8 +77,30 @@ def cmd_config(args) -> int:
     return 0
 
 
+def _quality_filter(args) -> Path | None:
+    """The quality-filter CSV to apply, or None to use every scene on disk."""
+    if args.no_filter:
+        logger.info("quality filter off: using every scene on disk")
+        return None
+    if args.filter_csv:
+        path = Path(args.filter_csv)
+        if not path.exists():
+            raise FileNotFoundError(f"no quality-filter CSV at {path}")
+    else:
+        path = config.filtered_inference_path(args.data_label)
+        if not path.exists():
+            logger.warning(
+                "no quality-filter CSV at %s: using every scene on disk "
+                "(pass --filter-csv, or --no-filter to silence this)", path,
+            )
+            return None
+    logger.info("quality filter: %s", path)
+    return path
+
+
 def cmd_infer(args) -> int:
     """Segment one glacier and render a GIF plus an area plot."""
+    from glacierview import rasters as raster_io
     from glacierview.inference import predict as predict_mod
     from glacierview.inference import render
     from glacierview.models import load_checkpoint
@@ -82,7 +109,8 @@ def cmd_infer(args) -> int:
     model = load_checkpoint(args.checkpoint, device)
 
     result = predict_mod.segment_glacier(
-        model, args.glims_id, device, args.data_label, variants=("binary",)
+        model, args.glims_id, device, args.data_label, variants=("binary",),
+        filtered_file_path=_quality_filter(args), preprocessing=args.preprocessing,
     )
     out_dir = Path(args.out_dir) if args.out_dir else config.outputs_dir()
 
@@ -93,6 +121,14 @@ def cmd_infer(args) -> int:
             images=result["smoothed"],
             probabilities=result["probabilities"],
             file_names=result["file_names"],
+            ground_truth=(render.ground_truth_mask(
+                args.glims_id, config.dem_path(args.glims_id, args.data_label))
+                if args.preprocessing == "current" else None),
+            areas=result["areas"]["binary"],
+            missing=result["missing"],
+            scenes_dir=config.glacier_dir(args.glims_id, args.data_label),
+            grid=(raster_io.reference_grid(config.dem_path(args.glims_id, args.data_label))
+                  if args.preprocessing == "current" else None),
         )
 
     areas = result["areas"]["binary"]
@@ -122,6 +158,8 @@ def cmd_areas(args) -> int:
         data_label=args.data_label,
         glims_ids=args.glims_id or None,
         write_gifs=not args.no_gif,
+        filtered_file_path=_quality_filter(args),
+        preprocessing=args.preprocessing,
     )
     print(json.dumps(summary, indent=2))
     return 0 if not summary["failures"] else 1
@@ -199,6 +237,7 @@ def cmd_train(args) -> int:
         freeze_encoder=args.freeze_encoder,
         seed=args.seed,
         num_workers=args.num_workers,
+        normalize=args.normalize,
     )
     logger.info("training config: %s", cfg.as_dict())
 
@@ -250,19 +289,33 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--device", help="cuda, mps or cpu; autodetected by default")
     common.add_argument("--out-dir", help="where to write outputs")
 
+    inference = argparse.ArgumentParser(add_help=False)
+    inference.add_argument("--checkpoint", required=True, help=CHECKPOINT_HELP)
+    inference.add_argument("--no-gif", action="store_true")
+    inference.add_argument(
+        "--preprocessing", choices=PREPROCESSING_CHOICES, default="current",
+        help="current (default; needs a model trained on it) or published "
+             "(what the published checkpoint was trained on)",
+    )
+    filtering = inference.add_mutually_exclusive_group()
+    filtering.add_argument(
+        "--filter-csv",
+        help="quality-filter CSV of scene file_names to use "
+             "(default: filtered_inference_data.csv in the processed metadata, if present)",
+    )
+    filtering.add_argument("--no-filter", action="store_true", help="use every scene on disk")
+
     p = sub.add_parser("config", parents=[common], help="print resolved paths")
     p.set_defaults(func=cmd_config)
 
-    p = sub.add_parser("infer", parents=[common], help="segment one glacier")
+    p = sub.add_parser("infer", parents=[common, inference], help="segment one glacier")
     p.add_argument("--glims-id", required=True)
-    p.add_argument("--checkpoint", required=True, help=CHECKPOINT_HELP)
-    p.add_argument("--no-gif", action="store_true")
     p.set_defaults(func=cmd_infer)
 
-    p = sub.add_parser("areas", parents=[common], help="segment the whole landing zone")
-    p.add_argument("--checkpoint", required=True, help=CHECKPOINT_HELP)
+    p = sub.add_parser(
+        "areas", parents=[common, inference], help="segment the whole landing zone"
+    )
     p.add_argument("--glims-id", action="append", help="repeat to limit the run")
-    p.add_argument("--no-gif", action="store_true")
     p.set_defaults(func=cmd_areas)
 
     p = sub.add_parser(
@@ -291,6 +344,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--test-size", type=float, default=0.1)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--num-workers", type=int, default=0)
+    p.add_argument(
+        "--normalize", action="store_true",
+        help="re-normalise each image as the published recipe did; only for the "
+             "published training set (config.published_training_set_dir())",
+    )
     p.set_defaults(func=cmd_train, out_dir="experiments/latest")
     return parser
 

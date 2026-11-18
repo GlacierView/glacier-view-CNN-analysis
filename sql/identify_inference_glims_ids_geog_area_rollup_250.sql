@@ -34,9 +34,8 @@
 -- happens before the inference imagery exists; the _full_time_series_250
 -- tables are the product of downloading what this query chose.
 --
--- Its output is a glacier list, not a file list: one training scene per
--- glacier. inference_data_query_250.sql embeds this query and returns the
--- time-series files for these glaciers.
+-- The src_date >= 1984-11-01 filter was added on 2026-11-02 and changes nothing
+-- here: the training tables' earliest scene is 2004-11-19.
 --
 -- Run against the `glacier-view` database in us-west-1.
 
@@ -91,6 +90,7 @@ from (
         )
         where
             cloud_cover < 5
+            and src_date >= timestamp '1984-11-01' -- Landsat 5's blue band reads ~45% low before this (config.FIRST_VALID_DATE)
             and (image_quality = 9 or image_quality_oli = 9)
             and num_pixels > 50000
             and no_data_pixel_count = 0

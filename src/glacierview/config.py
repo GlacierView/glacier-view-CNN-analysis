@@ -77,8 +77,13 @@ MODEL_INPUT_DIM = (128, 128)
 PROB_THRESHOLD = 0.5
 #: A Landsat pixel is 30 m x 30 m = 900 m^2 = 0.0009 km^2.
 KM2_PER_PIXEL = 0.0009
-#: Std. dev. of the Gaussian filter applied along the *time* axis, in frames.
+#: Std. dev. of the Gaussian filter applied along the *time* axis, in frames,
+#: by the current preprocessing.
 TIME_SMOOTHING_SIGMA = 2
+#: The sigma the published pipeline smoothed with. `--preprocessing published`
+#: always uses it, so it reproduces the published numbers whatever
+#: TIME_SMOOTHING_SIGMA is set to.
+PUBLISHED_TIME_SMOOTHING_SIGMA = 20
 #: Bands taken from every scene. `swir_2` is excluded deliberately — it was
 #: dropped for quality; see glacierview.models.unet.
 COMMON_BANDS = ("blue", "green", "red", "nir", "swir", "thermal")

@@ -51,18 +51,21 @@ Checked by diffing local inventories against the buckets.
 - ~~`glacierview infer` / `areas` apply no quality filter~~ — fixed 2026-11-02. Both now use only the
   scenes listed in `config.filtered_inference_path()` (`filtered_inference_data.csv`) when it exists,
   and `areas` skips glaciers with no listed scene. `--filter-csv` picks another file and `--no-filter`
-  uses everything on disk. The committed sample has no processed metadata, so it still runs on all
-  1,733 Trient scenes (the CSV lists 62 of them). Its series is noisier than the paper's 464-scene one.
+  uses everything on disk. The committed sample carries its own copy of the CSV's rows for its
+  scenes, so it runs Trient on 62 scenes by default, or on all 1,733 with `--no-filter`.
 - ~~The DEM is preprocessed in a different order in training and inference~~ — fixed 2026-11-02 for
   the current pipeline: `preprocess.prepare_dem` is shared. `--preprocessing published` keeps the
   old orders.
 - **Some training pairs on disk come from older masks.** `masks_staging_2/` has 17,946 masks, the
   training set 8,902; e.g. `G079924E35890N`'s pair differs from a rebuild. Rerunning notebooks 09–10
   will change some pairs.
+- **Time smoothing** is `config.TIME_SMOOTHING_SIGMA` = 2 frames for `current`, down from 20.
+  `gif_smoothing.ipynb` shows that sigma 20 flattens the seasonal cycle. `published` always uses
+  `config.PUBLISHED_TIME_SMOOTHING_SIGMA` = 20.
 - **Preprocessing rebuilt (2026-11-02); the published checkpoint needs `--preprocessing published`
   until a model is retrained.** `glacierview.preprocess` now has two pipelines. `current` is the
   default for `infer`, `areas` and notebook 10's training pairs; `published` reproduces exactly what
-  the published checkpoint saw (verified: identical Trient areas, Dice 0.870 on the 100 sample
+  the published checkpoint saw (verified: identical Trient areas with `--no-filter`, Dice 0.870 on the 100 sample
   glaciers). What `current` fixes:
   - **Scenes and DEM weren't on one grid.** Earth Engine returns each scene in its path/row's UTM zone
     and the DEM in EPSG:4326, each resized to 128×128 on its own. Trient's scenes come on two grids
@@ -94,8 +97,9 @@ Checked by diffing local inventories against the buckets.
   **What it costs until retraining.** The published checkpoint on `current` inputs scores Dice 0.848
   on the 100 sample glaciers (against masks rasterised on the reference grid), the same as
   cut-offs-only scaling gave (L5 0.873→0.855, L7 0.827→0.811, L8 0.883→0.840 for that change), so
-  the grid alignment didn't cost it anything. Trient's series reads 6.00 → 5.84 km² instead of
-  7.41 → 6.31 km². To retrain:
+  the grid alignment didn't cost it anything. On all 1,733 Trient scenes, the series reads
+  5.85 → 5.79 km² (`current`, sigma 2) instead of 7.41 → 6.31 km² (`published`, sigma 20). The
+  table of settings is in `data/sample/inference/README.md`. To retrain:
   1. Rebuild masks with notebook 09. They now go to `config.masks_dir()` (`masks_reference_grid/`);
      the old ones in `masks_staging_2/` have no S3 copy and are untouched.
   2. Rebuild pairs with notebook 10, into `config.training_set_dir()`

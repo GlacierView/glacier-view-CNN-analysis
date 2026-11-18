@@ -50,8 +50,10 @@ GV_DATA_ROOT=data/sample/inference uv run glacierview infer --glims-id G007026E4
   --checkpoint GlacierView/glacierview-unet --out-dir /tmp/trient
 ```
 
-Expect `1733 scenes, 6.00 -> 5.84 km^2`, or `7.41 -> 6.31 km^2` with `--preprocessing published` (15
-scenes before `config.FIRST_VALID_DATE` are skipped). Always pass `--out-dir` here. The same root holds one
+Expect `62 scenes, 6.20 -> 5.73 km^2`: the sample carries its own quality-filter CSV, which is applied
+automatically. With `--no-filter` the run uses all 1,733 scenes (15 before `config.FIRST_VALID_DATE`
+are skipped). `--preprocessing published --no-filter` reproduces the published `7.41 -> 6.31 km^2`
+exactly. The full table is in `data/sample/inference/README.md`. Always pass `--out-dir` here. The same root holds one
 training scene, DEM and GLIMS mask for 100 more glaciers (`data/sample/inference/glaciers.csv`).
 They're training images, so scoring against the masks checks plumbing, not accuracy.
 

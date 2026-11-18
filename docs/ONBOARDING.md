@@ -485,8 +485,11 @@ root is *not* an area, and this path is best read as a visual sanity check, not 
 
 The paper's stated order of operations is: **sort by date → resize to 128×128 → Gaussian-smooth
 along the time axis → compute NDSI/NDWI → CNN → resize back → count pixels.** That temporal smoothing
-is `gaussian(X, sigma=[20,0,0,0], mode='reflect')` — σ = 20 *time points*, i.e. each pixel is
+was `gaussian(X, sigma=[20,0,0,0], mode='reflect')` — σ = 20 *time points*, i.e. each pixel is
 smoothed against itself at neighbouring dates to suppress per-scene noise. It is not spatial blur.
+`--preprocessing published` keeps σ = 20 (`config.PUBLISHED_TIME_SMOOTHING_SIGMA`). The current
+pipeline uses `config.TIME_SMOOTHING_SIGMA` = 2. `notebooks/exploration/gif_smoothing.ipynb`
+compares sigmas, and shows σ = 20 flattening the seasonal cycle.
 
 ⚠️ The two scripts disagree about where smoothing sits, and the paper sides with `infer.py`:
 both now smooth first and derive the indices from the smoothed stack, which is the published order.
@@ -816,7 +819,8 @@ Every entry point (`infer`, `areas`, and notebook 10's training pairs) goes thro
    scale to [0, 1]. Every scene lands on the same scale; saturation lands at 1.
 4. **`preprocess.resize_masked`** — 128×128, averaging only valid pixels.
 5. The DEM goes onto the same grid, gets the second-extreme stretch, and is resized.
-6. **`preprocess.smooth_over_time`** (inference only) — the σ = 20-frame Gaussian along time,
+6. **`preprocess.smooth_over_time`** (inference only) — a Gaussian along time
+   (σ = `config.TIME_SMOOTHING_SIGMA` frames, currently 2),
    leaving NaN out, so a Landsat 7 stripe is filled from neighbouring dates instead of read as 0.
 7. **`preprocess.fill_missing`** — whatever is still missing takes its frame's mean.
 
@@ -993,8 +997,9 @@ reproducing its exact numbers needs the pre-refactor script from git history.
 - **A training fixture** — `data/sample/training`, 32 pairs, committed. Enough
   to smoke test training with no download.
 - **An inference fixture** — `data/sample/inference`, every Trient scene plus its DEM,
-  committed. `GV_DATA_ROOT=data/sample/inference` runs Trient end to end (1,733 of
-  its 1,748 scenes, from November 1984; 7.41 → 6.31 km²). It also holds one scene, DEM and mask for 100 more glaciers.
+  committed. `GV_DATA_ROOT=data/sample/inference` runs Trient end to end: 62 scenes
+  through the sample's quality filter, or 1,733 of its 1,748 (from November 1984) with
+  `--no-filter`. `--preprocessing published --no-filter` gives the published 7.41 → 6.31 km². It also holds one scene, DEM and mask for 100 more glaciers.
 - **Inference DEMs** — all 1,122, matching the bucket's ID set exactly.
 - **Inference metadata** — the four table CSVs plus `filtered_inference_data.csv`.
 - **Analysis inputs** — the four CSVs in `data/analysis/`:

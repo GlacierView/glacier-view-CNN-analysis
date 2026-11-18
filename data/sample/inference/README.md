@@ -21,10 +21,18 @@ GV_DATA_ROOT=data/sample/inference uv run glacierview infer \
   --glims-id G007026E45991N --checkpoint GlacierView/glacierview-unet --out-dir /tmp/trient
 ```
 
-Expected result: `G007026E45991N: 62 scenes, 6.26 -> 5.60 km^2`, using the quality filter (below) and
-`config.TIME_SMOOTHING_SIGMA = 0`. `--no-filter` uses all 1,733 scenes. The published checkpoint was
-trained on the published preprocessing, so until a model is retrained on the current one,
-`--preprocessing published` is the setting that matches it. Inference
+Expected result: `G007026E45991N: 62 scenes, 6.20 -> 5.73 km^2`. That uses the quality filter (below)
+and the current preprocessing, smoothed at `config.TIME_SMOOTHING_SIGMA` (2). Other settings:
+
+| | quality filter (default) | `--no-filter` |
+|---|---|---|
+| `--preprocessing current` (sigma 2) | 62 scenes, 6.20 → 5.73 km² | 1,733 scenes, 5.85 → 5.79 km² |
+| `--preprocessing published` (sigma 20) | 62 scenes, 6.69 → 5.91 km² | 1,733 scenes, 7.41 → 6.31 km² |
+
+`published --no-filter` reproduces the published run exactly. The published checkpoint was trained on
+the published preprocessing, so until a model is retrained on the current one, `--preprocessing
+published` is the setting that matches it. The published pipeline always smooths at
+`config.PUBLISHED_TIME_SMOOTHING_SIGMA` (20). Inference
 skips the 15 scenes before 1 November 1984 (`config.FIRST_VALID_DATE`), when Landsat 5's blue band
 reads about 45% low.
 

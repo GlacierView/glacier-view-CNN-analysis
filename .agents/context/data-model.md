@@ -57,9 +57,11 @@ Two steps the paper documents that are easy to miss in the code:
   GLIMS `src_date`, combined by arithmetic mean. The code does not do this. Notebook 03 pulls scenes
   within ±50 days, `sql/training_data_query.sql` picks one, and notebook 10 builds the pair from that
   single scene; the training set on disk is single scenes too.
-- **Inference applies a Gaussian filter along the time axis**, not in space:
-  `gaussian(X, sigma=[20,0,0,0], mode='reflect')` — σ = 20 *time points*, smoothing each pixel
-  across the glacier's time series to reduce noise.
+- **Inference applies a Gaussian filter along the time axis**, not in space, smoothing each pixel
+  across the glacier's time series to reduce noise. The published run used
+  `gaussian(X, sigma=[20,0,0,0], mode='reflect')` (σ = 20 *time points*), and `--preprocessing
+  published` still does (`config.PUBLISHED_TIME_SMOOTHING_SIGMA`). The current pipeline uses
+  `config.TIME_SMOOTHING_SIGMA` (2) and leaves missing pixels out (`preprocess.smooth_over_time`).
 
 Both `glacierview infer` and `glacierview areas` go through `inference.predict.build_inputs`, which
 smooths first and computes NDSI/NDWI on the smoothed stack, as the paper does. (The two original

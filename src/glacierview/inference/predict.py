@@ -90,20 +90,25 @@ def read_stack(
 def smooth_stack(
     stack: np.ndarray,
     preprocessing: str = "current",
-    sigma: float = config.TIME_SMOOTHING_SIGMA,
+    sigma: float | None = None,
     with_missing: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Smooth a `read_stack` stack along time, as the pipeline does, with nothing missing left.
 
     This is a time-only smooth: each pixel against itself on neighbouring dates,
-    not a spatial blur. `sigma` is in frames, and 0 turns smoothing off; the
-    pipeline always uses `config.TIME_SMOOTHING_SIGMA`.
+    not a spatial blur.
 
     Args:
+        sigma: in frames; 0 turns smoothing off. None, which is what the
+            pipeline uses, means `config.TIME_SMOOTHING_SIGMA` for "current" and
+            `config.PUBLISHED_TIME_SMOOTHING_SIGMA` (20) for "published".
         with_missing: also return an (N, H, W) bool mask of the pixels that had
             no band data even after smoothing, so were filled by `fill_missing`.
             The GIFs draw them black. Always all False for "published".
     """
+    if sigma is None:
+        sigma = (config.PUBLISHED_TIME_SMOOTHING_SIGMA if preprocessing == "published"
+                 else config.TIME_SMOOTHING_SIGMA)
     if preprocessing == "published":
         smoothed = gaussian(stack, sigma=[sigma, 0, 0, 0], mode="reflect")
         return (smoothed, np.zeros(smoothed.shape[:3], dtype=bool)) if with_missing else smoothed

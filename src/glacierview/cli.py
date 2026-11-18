@@ -210,6 +210,7 @@ def cmd_areas_s3(args) -> int:
                 write_gifs=False,
                 filtered_file_path=args.file_list,
                 skip_done=True,
+                preprocessing=args.preprocessing,
             )
         succeeded += summary["succeeded"]
         failures += summary["failures"]
@@ -328,6 +329,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Athena output of sql/inference_data_query_250.sql (glims_id, file_name)",
     )
     p.add_argument("--checkpoint", required=True, help=CHECKPOINT_HELP)
+    p.add_argument(
+        "--preprocessing", choices=PREPROCESSING_CHOICES, default="current",
+        help="current (default; needs a model trained on it) or published "
+             "(what the published checkpoint was trained on)",
+    )
     p.add_argument("--batch-size", type=int, default=25, help="glaciers per download")
     p.add_argument("--workers", type=int, default=16, help="parallel glacier downloads")
     p.add_argument("--limit", type=int, help="stop after this many glaciers (for a trial run)")

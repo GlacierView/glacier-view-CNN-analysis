@@ -14,7 +14,10 @@ uv run glacierview train --data-dir data/sample/training --epochs 1 --batch-size
 ```
 
 `--data-dir` defaults to `config.training_set_dir()` (the `images/` + `masks/` set notebook 10
-builds). Each run writes `model.state_dict.pt` and `run.json` (config, per-epoch losses, best epoch,
+builds with the current preprocessing; rebuild masks with notebook 09 first). The published
+checkpoint's set is `config.published_training_set_dir()`; to reproduce that training, pass it as
+`--data-dir` with `--normalize`. The committed fixture `data/sample/training` comes from the published
+set, so it's only good for smoke tests. Each run writes `model.state_dict.pt` and `run.json` (config, per-epoch losses, best epoch,
 test Dice and Jaccard) to `--out-dir`.
 
 ## Match the published recipe

@@ -12,9 +12,9 @@ import torchvision.transforms.functional as TF
 from skimage import io
 from torch.utils.data import Dataset
 
-from glacierview import config
 from glacierview.log import get_logger
 from glacierview.models import IN_CHANNELS
+from glacierview.preprocess import add_spectral_indices
 
 logger = get_logger(__name__)
 
@@ -121,6 +121,12 @@ class GlacierDataset(Dataset):
 
     The tifs on disk carry 7 channels (6 Landsat bands + DEM); the two
     spectral indices bring that to the 9 the model takes.
+
+    ``normalize=True`` reproduces the published recipe: each channel is min-max
+    normalised again, with +1 on the range, so inputs land in about [0, 0.5].
+    NDSI/NDWI then use the published formula (`add_spectral_indices(legacy=True)`).
+    Leave it off for sets built by the current `build_training_pair`, which are
+    already scaled the way inference scales them.
     """
 
     def __init__(
@@ -128,7 +134,7 @@ class GlacierDataset(Dataset):
         manifest: pd.DataFrame,
         data_dir: Path,
         augment: bool = False,
-        normalize: bool = True,
+        normalize: bool = False,
     ):
         self.manifest = manifest.reset_index(drop=True)
         self.data_dir = Path(data_dir)
@@ -167,13 +173,9 @@ class GlacierDataset(Dataset):
             ]
             image = TF.normalize(image, mins, spans)
 
-        # Band positions refer to config.COMMON_BANDS order.
-        green, nir, swir = image[1], image[3], image[4]
-        eps = config.INDEX_EPSILON
-        ndsi = ((green - swir + eps) / (green + swir + eps)).unsqueeze(0)
-        image = torch.cat((ndsi, image), dim=0)
-        ndwi = ((green - nir + eps) / (green + nir + eps)).unsqueeze(0)
-        image = torch.cat((ndwi, image), dim=0)
+        # The same function inference uses. With normalize on (the published
+        # recipe), the published formula is used too.
+        image = add_spectral_indices(image.unsqueeze(0), legacy=self.normalize)[0]
 
         if image.shape[0] != IN_CHANNELS:
             raise ValueError(

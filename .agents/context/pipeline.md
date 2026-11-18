@@ -20,11 +20,15 @@ Data flows in one direction; each stage writes files that the next stage reads.
    `inference_data_query.sql` / `training_data_query.sql` pick files. Criteria: cloud cover < 5%,
    summer months only (May–Oct northern hemisphere, Nov–Apr southern), > 50,000 pixels,
    0 no-data pixels, < 10% zero pixels.
-5. **Training-set build** — notebook 09 rasterizes GLIMS outlines into masks, reprojecting each into
-   its scene's CRS; notebook 10 pairs scenes, DEMs and masks into `config.training_set_dir()`
-   (`images/` + `masks/`). Both call `glacierview.training.build`.
+5. **Training-set build** — notebook 09 rasterizes GLIMS outlines into masks on each glacier's
+   reference grid (`rasters.reference_grid`, 30 m UTM over the DEM's extent); notebook 10 puts each
+   scene and DEM on the same grid and writes pairs into `config.training_set_dir()`
+   (`images/` + `masks/`). Both call `glacierview.training.build`, which shares
+   `glacierview.preprocess` with inference.
 6. **Train** — `glacierview train`.
 7. **Inference** — `glacierview infer` (single glacier, GIF + area plot) or
-   `glacierview areas` (every glacier in the landing zone, area CSVs + GIFs).
+   `glacierview areas` (every glacier in the landing zone, area CSVs + GIFs). Both use only the
+   scenes in `config.filtered_inference_path()` when it exists (`--filter-csv`, `--no-filter`), and
+   `--preprocessing current|published` picks the pipeline (`glacierview.preprocess`).
 8. **Analysis** — `notebooks/analysis/regional_decline.ipynb` estimates each region's decline from
    the area series in `data/analysis/`.

@@ -49,6 +49,7 @@ from (
         )
         where
             cloud_cover < 5
+            and src_date >= timestamp '1984-11-01' -- Landsat 5's blue band reads ~45% low before this (config.FIRST_VALID_DATE)
             and (image_quality = 9 or image_quality_oli = 9)
             and num_pixels > 50000
             and no_data_pixel_count = 0

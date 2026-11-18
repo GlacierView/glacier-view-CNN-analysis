@@ -27,31 +27,45 @@ Bucket inventory and the Athena catalog: `.agents/references/aws.md`.
 
 ## Raster conventions
 
-`glacierview.rasters` + `glacierview.preprocess` are the shared raster path used by every notebook and script:
+`glacierview.rasters` + `glacierview.preprocess` are the shared raster path used by every notebook and
+script. Two pipelines exist (`--preprocessing current|published`); the module docstring of
+`preprocess` lays out both.
 
-- `read.get_rasters` returns a `{file_name: HWC array}` dict, clamping `-inf` and negatives to 0.
-- Band indices differ per satellite — `glacierview.bands` maps names to indices for `l5`/`l7`/`l8`,
-  and `preprocess.get_common_bands` uses the **third underscore-delimited token of the filename**
-  (`{glims_id}_{date}_{L5|L7|L8}_C02_T1_L2_SR.tif`) to pick the right map. Filenames are load-bearing;
-  `infer.py` also parses the date from token 1.
-- `preprocess.normalize_rasters` normalizes per band using the *second* min/max (the extremes are
-  treated as sensor artifacts and replaced) — not a plain min-max.
+- **current** (default; a model must be retrained on it). Each glacier gets one
+  `rasters.reference_grid`: 30 m UTM over the DEM's extent, in the zone of its centre. Every scene,
+  the DEM and the training mask are resampled onto it, because Earth Engine returns scenes in
+  whichever UTM zone their path/row uses (Trient arrives on two grids 128 m apart) and the DEM in
+  EPSG:4326. `rasters.read_scene` reads only the six bands, turns fill (DN <= 0 or nodata) into NaN,
+  and resamples nearest-neighbour. Bands are clipped to `bands.CUTOFFS_DN` and scaled to [0, 1]
+  (`scale_to_cutoffs`), resized with a NaN-aware average (`resize_masked`), smoothed along time with
+  NaN left out (`smooth_over_time`), and only then filled (`fill_missing`). NDSI/NDWI use
+  `(a - b) / (a + b + eps)`. Areas are measured on the reference grid.
+- **published** (what the published checkpoint was trained and run on): `rasters.get_rasters`
+  returns `{file_name: HWC array}` per file on its own grid, negatives clamped to 0;
+  `normalize_rasters` stretches each band between its *second* smallest and largest distinct values;
+  scenes and the DEM are resized independently; NDSI/NDWI use `(a - b + eps) / (a + b + eps)`, which
+  turns 0/0 fill into +1.
+- Band indices differ per satellite. `glacierview.bands` maps names to indices for `l5`/`l7`/`l8`,
+  and `preprocess.band_indexes` picks the map from the **third underscore-delimited token of the
+  filename** (`{glims_id}_{date}_{L5|L7|L8}_C02_T1_L2_SR.tif`), returning the bands in
+  `COMMON_BANDS` order. Filenames are load-bearing; inference also parses the date from token 1.
 - Everything is resized to 128×128 before the model and resized back afterwards for area.
 
 Two steps the paper documents that are easy to miss in the code:
 
-- **Training images were temporally averaged.** All Landsat scenes within a ±100-day window of the
-  GLIMS `src_date` (the outline's as-of date) were pulled and combined by arithmetic mean, to
-  suppress shadows, debris and defects. So one training image is a composite, not a single scene.
+- **The paper says training images were temporally averaged**: all scenes within ±100 days of the
+  GLIMS `src_date`, combined by arithmetic mean. The code does not do this. Notebook 03 pulls scenes
+  within ±50 days, `sql/training_data_query.sql` picks one, and notebook 10 builds the pair from that
+  single scene; the training set on disk is single scenes too.
 - **Inference applies a Gaussian filter along the time axis**, not in space:
   `gaussian(X, sigma=[20,0,0,0], mode='reflect')` — σ = 20 *time points*, smoothing each pixel
   across the glacier's time series to reduce noise.
 
-⚠️ The two inference scripts disagree on where smoothing happens, and the paper sides with
-`infer.py`: the paper smooths first and computes NDSI/NDWI on the smoothed stack (as `infer.py`
-does), while `glacierview areas` computes the indices first and then smooths everything including them.
+Both `glacierview infer` and `glacierview areas` go through `inference.predict.build_inputs`, which
+smooths first and computes NDSI/NDWI on the smoothed stack, as the paper does. (The two original
+scripts disagreed on this order; that is why they were merged.)
 
-⚠️ Reprojection direction also differs: the paper says the *rasters* were reprojected to WGS 84 to
-match the polygons, while notebook 09 reprojects the *polygons* into each raster's UTM CRS.
-Same alignment goal, opposite direction — likely an evolution, but don't assume either doc matches
-what produced a given artifact.
+⚠️ Reprojection direction differs from the paper: the paper says the *rasters* were reprojected to
+WGS 84 to match the polygons. The published code reprojected the *polygons* into one scene's UTM CRS
+(notebook 09), and the current code rasterises them onto the reference grid. Don't assume any of the
+three produced a given artifact.

@@ -169,12 +169,13 @@ The bands this project cares about:
 | **swir** (shortwave infrared) | further out | **ice and snow are very dark here, clouds are bright** — the single most useful band for telling ice from cloud |
 | swir_2 | a second SWIR window | more of the same |
 | thermal | heat | ice is cold |
-| `atmos_opacity`, `cloud_qa`, `qa_aerosol`, … | sensor quality flags | present in the files; **this project ignores them** |
+| `sr_cloud_qa`, `qa_pixel`, `st_atran`, … | quality bitmasks and surface-temperature inputs | 13 of the 19 bands in each file; **this project ignores them** |
 
 **Critically: the band order differs per satellite.** On Landsat 5 and 7, band index 0 is blue. On
 Landsat 8, index 0 is `coastal_aerosol` and blue is index 1 — everything shifts by one.
-`glacierview.bands` is the lookup table that fixes this, and
-`preprocess.get_common_bands()` uses it to produce a consistent band order regardless of satellite.
+`glacierview.bands` is the lookup table that fixes this (it lists all 19 Earth Engine band ids per
+satellite; Landsat 8's thermal band is `ST_B10`, the only one in this product), and
+`preprocess.band_indexes()` uses it to return the bands in `COMMON_BANDS` order whatever the satellite.
 This is why **filenames are load-bearing** — see Part 6.
 
 ### Spectral indices (NDSI, NDWI)
@@ -425,15 +426,18 @@ Four things to know about this SQL, all verified by reading it:
 **Where:** `notebooks/pipeline/09_build_masks.ipynb`, then `10_build_training_set.ipynb`, both
 calling `glacierview.training.build`
 
-Notebook 09 (`rasterize_outline`) turns each glacier's lat/long GLIMS polygon into a pixel mask aligned
-to that glacier's imagery: take the glacier's first scene in `image_attributes.csv`, reproject the
-polygon into that scene's CRS, then rasterize it (polygon in, 1s-inside/0s-outside raster out). Output goes to
-`training/data/masks_staging_2/` at each glacier's **native** resolution — e.g. 50×57 pixels for one
-small glacier (verified by reading the TIFF headers).
+Notebook 09 (`rasterize_outline`) turns each glacier's lat/long GLIMS polygon into a pixel mask on
+that glacier's **reference grid** (`rasters.reference_grid`): 30 m UTM over the DEM's extent, in
+the zone of its centre. Every scene and the DEM are resampled onto the same grid, so the mask lines
+up with any scene of the glacier whatever UTM zone it arrived in. Output goes to
+`training/data/masks_reference_grid/`. (The published pipeline drew each mask on the glacier's first
+scene's grid instead, which needn't be the grid of the scene it was paired with; those masks stay in
+`masks_staging_2/`.)
 
-Notebook 10 (`build_training_pair`) then assembles the trainable pairs: take the filtered file list from SQL,
-select the common bands, normalize, resize everything to 128×128, stack the DEM on as a final
-channel, and write matched `images/` and `masks/` tifs.
+Notebook 10 (`build_training_pair`) then assembles the trainable pairs: take the filtered file list
+from SQL, and preprocess each scene exactly as inference does (reference grid, fixed cut-offs, fill
+masked then filled with the scene mean, 128×128), stack the DEM on as a final channel, and write
+matched `images/` and `masks/` tifs to `processed_training_data_reference_grid/`.
 
 **One step the paper documents that's easy to miss: training images are temporal composites, not
 single scenes.** All Landsat scenes within a **±100-day window** of the GLIMS `src_date` (the
@@ -551,9 +555,9 @@ figures/                diagrams and plots
 |---|---|
 | `config.py` | Every path and constant. Derived from `GV_REPO_ROOT` and `GV_DATA_ROOT`, both environment-overridable, so the ~110 GB of imagery need not sit in the checkout. **Run `glacierview config` to see everything resolved** — it is the fastest way to diagnose a path problem. |
 | `log.py` | Logging setup. Named `log` so it does not shadow stdlib `logging`. |
-| `rasters.py` | Reads GeoTIFFs and DEMs into HWC arrays, clamping negatives and `-inf` to zero. `get_rasters` takes an optional `filtered_file_path` — a CSV of filenames — which is how the metadata quality filter is applied before anything reaches memory. |
-| `preprocess.py` | The shared pipeline: select common bands per satellite, normalize, resize to 128×128, stack the DEM, prepend NDSI and NDWI. Both inference paths use it, so they cannot drift. |
-| `bands.py` | Pure data: per-satellite band-name→index maps. The `extra*` padding entries must stay — the selection mask is positional over the raster's band axis. |
+| `rasters.py` | Reads GeoTIFFs and DEMs into HWC arrays. `reference_grid` gives each glacier one 30 m UTM grid; `read_scene` / `read_dem` resample onto it with fill as NaN. `get_rasters` / `get_dem` are the published pipeline's whole-file readers. `list_scenes` takes an optional `filtered_file_path` — a CSV of filenames — which is how the metadata quality filter is applied before anything reaches memory. |
+| `preprocess.py` | The shared pipeline, in two versions (`current`, `published`): band selection, scaling, resize to 128×128, DEM, time smoothing, NDSI and NDWI. Both inference paths and the training-set build use it, so they cannot drift. |
+| `bands.py` | Per-satellite band-name→index maps (all 19 Earth Engine bands, in file order), the DN encodings, and the fixed cut-offs. |
 | `glims.py` | The GLIMS selection rules, bounding boxes, and the region rollup map (notebooks 01–02). |
 | `metadata.py` | Pull-log parsing, scene and image attributes, flattened Earth Engine metadata: the tables behind Athena (notebooks 06–07). Column order is a contract. |
 | `models/unet.py` | **The only definition of the model.** `IN_CHANNELS = 9`. |
@@ -760,8 +764,11 @@ src/glims/data/
   joined_time_series/
 
 src/segmentation/
-  training/data/masks_staging_2/                        # native-resolution masks
-  training/data/processed_training_data_summer_months/   # the actual training pairs
+  training/data/masks_reference_grid/                    # masks on each glacier's reference grid
+  training/data/processed_training_data_reference_grid/  # training pairs, current pipeline
+    images/  masks/
+  training/data/masks_staging_2/                         # published pipeline: scene-grid masks
+  training/data/processed_training_data_summer_months/   # published pipeline: the pairs it trained on
     images/  masks/
   training/src/training_data/{images,masks}   # ← where train.py looks (relative to its cwd)
   unet_summer_model_unfrozen_100              # the production checkpoint (~340 MB)
@@ -786,33 +793,49 @@ Split on `_`:
 - **token 1** → the date, parsed with `datetime.strptime(..., '%Y-%m-%d')` in `infer.py:67` and
   the batch runner
 - **token 2** → the satellite, lowercased and looked up in `glacierview.bands` by
-  `glacierview.preprocess.get_common_bands()`
+  `glacierview.preprocess.band_indexes()`
 
 **Rename a file and the pipeline silently misreads its bands or its date.** Any new data must follow
 this exact pattern.
 
 ### The preprocessing chain
 
-Every entry point runs the same four steps in the same order:
+Every entry point (`infer`, `areas`, and notebook 10's training pairs) goes through
+`glacierview.preprocess`, which has two versions, chosen by `--preprocessing`.
 
-1. **`read.get_rasters(dir)`** — opens every `.tif`, sets `-inf` and all negative values to 0,
-   moves the band axis last (HWC), returns `{filename: array}`.
-2. **`preprocess.get_common_bands(rasters, common_bands)`** — per satellite, select the named bands.
-   It uses `np.isin(before_bands, common_bands)` as a boolean mask, which **preserves the original
-   band order** rather than the order you listed. So the output order is the satellite's native
-   order, filtered — and the point is that this comes out *consistent* across L5/L7/L8.
-3. **`preprocess.normalize_rasters(rasters)`** — ⚠️ **not a plain min-max.** It finds the *second*
-   smallest and *second* largest unique values, replaces the actual extremes with those, then scales
-   to [0,1]. The reasoning: true min/max are usually sensor artifacts (dead pixels, saturation) and
-   would squash the real signal. Worth knowing, because it means values slightly outside [0,1] can
-   survive, and a uniform band is special-cased.
-4. **`preprocess.resize_rasters(rasters, (128,128))`** — torchvision resize.
+**`current`** (the default; a model must be retrained on it):
 
-Then NDSI and NDWI are computed and prepended, and the DEM is concatenated. Details in Part 7.
+1. **`rasters.reference_grid(dem_path)`** — one 30 m UTM grid per glacier, covering the DEM's extent
+   (the glacier's padded bounding box), snapped to Landsat's pixel phase. Earth Engine returns each
+   scene in its path/row's UTM zone and the DEM in EPSG:4326, so without this the same pixel index
+   lands on different ground on different dates: Trient's two scene grids are 128 m apart at
+   128×128, and its DEM is about 270 m off.
+2. **`rasters.read_scene`** — reads only the six `COMMON_BANDS`, in that order, onto the grid
+   (nearest-neighbour), with fill (DN ≤ 0 or nodata) and off-footprint pixels as NaN.
+3. **`preprocess.scale_to_cutoffs`** — clip to `bands.CUTOFFS_DN` (reflectance 0–1, 200–320 K) and
+   scale to [0, 1]. Every scene lands on the same scale; saturation lands at 1.
+4. **`preprocess.resize_masked`** — 128×128, averaging only valid pixels.
+5. The DEM goes onto the same grid, gets the second-extreme stretch, and is resized.
+6. **`preprocess.smooth_over_time`** (inference only) — the σ = 20-frame Gaussian along time,
+   leaving NaN out, so a Landsat 7 stripe is filled from neighbouring dates instead of read as 0.
+7. **`preprocess.fill_missing`** — whatever is still missing takes its frame's mean.
+
+Scenes are processed one at a time, so memory holds the 128×128 stack, not every full-resolution
+raster.
+
+**`published`** (what the published checkpoint was trained and run on): `rasters.get_rasters` reads
+every band of every scene on its own grid and clamps negatives to 0; `get_common_bands` selects the
+six bands; **`normalize_rasters`** stretches each band between its *second* smallest and *second*
+largest distinct values (⚠️ not a plain min-max — the extremes are treated as artifacts); scenes and
+DEM are resized to 128×128 independently.
+
+Then NDSI and NDWI are computed and prepended (`add_spectral_indices`). Details in Part 7.
 
 The LLD flags a subtlety here: *"We should pick to resize based on a single size otherwise we get two
-lines appearing in the line plot."* Inconsistent resize targets across a time series produce a
-visible discontinuity in the area plot — an artifact of preprocessing, not real glacier change.
+lines appearing in the line plot."* Inconsistent grids across a time series produce a visible
+discontinuity in the area plot, an artifact of preprocessing rather than real glacier change. The
+published pipeline still has it, since each UTM zone's scenes have their own size and footprint. The
+reference grid removes it.
 
 ---
 
@@ -970,8 +993,8 @@ reproducing its exact numbers needs the pre-refactor script from git history.
 - **A training fixture** — `data/sample/training`, 32 pairs, committed. Enough
   to smoke test training with no download.
 - **An inference fixture** — `data/sample/inference`, every Trient scene plus its DEM,
-  committed. `GV_DATA_ROOT=data/sample/inference` runs Trient end to end (1,748 scenes,
-  7.49 → 6.31 km²). It also holds one scene, DEM and mask for 100 more glaciers.
+  committed. `GV_DATA_ROOT=data/sample/inference` runs Trient end to end (1,733 of
+  its 1,748 scenes, from November 1984; 7.41 → 6.31 km²). It also holds one scene, DEM and mask for 100 more glaciers.
 - **Inference DEMs** — all 1,122, matching the bucket's ID set exactly.
 - **Inference metadata** — the four table CSVs plus `filtered_inference_data.csv`.
 - **Analysis inputs** — the four CSVs in `data/analysis/`:
@@ -1098,9 +1121,10 @@ even when the trend is right.
 ### Step 5 — scaling up without pulling 486 GB
 
 `filtered_inference_data.csv` narrows inference to **245 glaciers / 14,952
-files / 23.7 GB**. `glacierview.rasters.get_rasters` accepts a
-`filtered_file_path`, so the quality filter can be applied at read time rather
-than relying on what you happened to download.
+files / 23.7 GB**. `glacierview infer` and `areas` apply it at read time
+whenever it exists at `config.filtered_inference_path()` (or pass
+`--filter-csv`; `--no-filter` turns it off), rather than relying on what you
+happened to download.
 
 `aws s3 sync` was too slow for the original upload; `cp --recursive` is what
 was used. Always exclude `.DS_Store` (some are 660 KB) and `meta_data/`.

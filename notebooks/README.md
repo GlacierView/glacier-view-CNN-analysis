@@ -44,8 +44,10 @@ All the pulls resume: glaciers already on disk are skipped.
 |---|---|
 | `glims_inventory.ipynb` | Region counts and maps for the selected, trained-on and inference glaciers. |
 | `landsat_metadata.ipynb` | Where the cloud-cover, zero-pixel and pixel-count thresholds came from. |
-| `band_distributions.ipynb` | Per-scene band minima and maxima across Landsat 8. |
-| `preprocessing_sandbox.ipynb` | Scenes before and after preprocessing, band by band. |
+| `band_distributions.ipynb` | Pixel-value distributions for all 19 bands of Landsat 5, 7 and 8, with suggested cut-offs. |
+| `preprocessing_sandbox.ipynb` | Scenes raw, under the current per-scene normalisation, and scaled to the fixed cut-offs, band by band. |
+| `scene_viewer.ipynb` | Every band of one scene as an image, true- and false-colour composites, a grid across glaciers and a time strip. Runs on the committed sample by default, showing only scenes that pass the quality filter (`USE_FILTER`). |
+| `gif_smoothing.ipynb` | Segments a random glacier's time series, writes its GIF, and shows frames, pixel series and area series before and after time smoothing at several `SIGMA`s. Runs on the committed sample by default. |
 
 `band_distributions` and `preprocessing_sandbox` take `USE_SAMPLE = True` to run on the committed
 sample (`data/sample/inference`) instead of the full landing zone.

@@ -18,6 +18,7 @@ import ee
 import geemap
 import pandas as pd
 
+from glacierview import config
 from glacierview.log import get_logger
 
 logger = get_logger(__name__)
@@ -92,8 +93,12 @@ class EePull:
         end: datetime,
         out_dir: Path | str,
     ) -> int:
-        """Export every qualifying scene from one satellite. Returns the count."""
+        """Export every qualifying scene from one satellite. Returns the count.
+
+        Never earlier than `config.FIRST_VALID_DATE`, whatever ``start`` says.
+        """
         collection_id, quality = COLLECTIONS[satellite]
+        start = max(start, config.FIRST_VALID_DATE)
         region = ee.Geometry.Polygon(list(bounding_box))
         scenes = (
             ee.ImageCollection(collection_id)

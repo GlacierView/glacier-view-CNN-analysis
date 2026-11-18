@@ -22,6 +22,7 @@ live; the others are pre-Collection-2 and should not be populated.
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 # --------------------------------------------------------------------------- #
@@ -58,6 +59,14 @@ TRAINING_DATA_LABEL = "localized_time_series_for_training_c02_t1_l2"
 
 DEFAULT_DATA_LABEL = os.environ.get("GV_DATA_LABEL", INFERENCE_DATA_LABEL)
 
+#: No scene before this is pulled, queried or used. Landsat 5's blue band reads
+#: about 45% low over snow from launch (March 1984) until November 1984: the
+#: blue/green ratio over snow is 0.52-0.63 through August, recovers through
+#: October, and is normal (~0.95-1.0) from early November, on every one of the
+#: 16 glaciers checked across five regions. Landsat 5 is the only satellite with
+#: earlier data, so one date covers everything.
+FIRST_VALID_DATE = datetime(1984, 11, 1)
+
 # --------------------------------------------------------------------------- #
 # Model and preprocessing constants
 # --------------------------------------------------------------------------- #
@@ -69,7 +78,7 @@ PROB_THRESHOLD = 0.5
 #: A Landsat pixel is 30 m x 30 m = 900 m^2 = 0.0009 km^2.
 KM2_PER_PIXEL = 0.0009
 #: Std. dev. of the Gaussian filter applied along the *time* axis, in frames.
-TIME_SMOOTHING_SIGMA = 20
+TIME_SMOOTHING_SIGMA = 2
 #: Bands taken from every scene. `swir_2` is excluded deliberately — it was
 #: dropped for quality; see glacierview.models.unet.
 COMMON_BANDS = ("blue", "green", "red", "nir", "swir", "thermal")
@@ -122,6 +131,16 @@ def processed_metadata_dir(data_label: str | None = None) -> Path:
     return DATA_ROOT / "earth_engine" / "data" / "processed_metadata" / label
 
 
+def filtered_inference_path(data_label: str | None = None) -> Path:
+    """The quality filter: the saved Athena result of ``sql/inference_data_query.sql``.
+
+    It lists the scenes (``file_name``) that pass the cloud, season and pixel
+    checks. `glacierview infer` and `glacierview areas` use only those scenes
+    when this file exists.
+    """
+    return processed_metadata_dir(data_label) / "filtered_inference_data.csv"
+
+
 def glims_data_dir() -> Path:
     """GLIMS shapefiles and the derived sample CSVs."""
     return DATA_ROOT / "glims" / "data"
@@ -148,12 +167,34 @@ def training_data_dir() -> Path:
 
 
 def masks_dir() -> Path:
-    """One full-resolution GLIMS mask per glacier (notebook 09)."""
-    return training_data_dir() / "masks_staging_2"
+    """One GLIMS mask per glacier, on its reference grid (notebook 09)."""
+    return training_data_dir() / "masks_reference_grid"
 
 
 def training_set_dir() -> Path:
-    """The model-ready training set: ``images/`` and ``masks/`` (notebook 10)."""
+    """The model-ready training set, ``images/`` and ``masks/`` (notebook 10).
+
+    It is built by the current preprocessing pipeline, and it is what
+    `glacierview train` reads by default.
+    """
+    return training_data_dir() / "processed_training_data_reference_grid"
+
+
+def published_masks_dir() -> Path:
+    """The published pipeline's masks, each drawn on one scene's grid.
+
+    They don't fit the current pipeline, and they have no S3 copy. Kept separate
+    so that rebuilding with notebook 09 can't overwrite them.
+    """
+    return training_data_dir() / "masks_staging_2"
+
+
+def published_training_set_dir() -> Path:
+    """The set the published checkpoint was trained on (``s3://training-images-t1-l2-sr``).
+
+    To reproduce that training, pass it as ``--data-dir`` with
+    ``TrainConfig.normalize`` on.
+    """
     return training_data_dir() / "processed_training_data_summer_months"
 
 

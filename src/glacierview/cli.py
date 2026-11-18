@@ -243,7 +243,8 @@ def cmd_train(args) -> int:
 
     train_df, holdout = build_manifest(data_dir, test_size=args.test_size, seed=args.seed)
     # Halve the holdout into eval (epoch selection) and test (final score),
-    # which is the published 90/5/5 split rather than a bare 90/10.
+    # a 90/5/5 split (the paper's text says 90/10/10; only its flowchart
+    # counts of 359/359 imply 90/5/5).
     half = len(holdout) // 2
     eval_df, test_df = holdout[:half], holdout[half:]
     logger.info("%d train / %d eval / %d test", len(train_df), len(eval_df), len(test_df))

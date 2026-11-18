@@ -5,8 +5,11 @@ Shrinkage Using Convolutional Neural Networks"** — Matthew Waismann (Amazon), 
 Armin Schwartzman (Halıcıoğlu Data Science Institute, UC San Diego; `armins@ucsd.edu`). The LaTeX
 source is not in this repo. Headline claims:
 
-- Trained on **7,174** glacier contours + images, one time point each; **Dice 0.92** on the test set.
-- Inference over **505,835 images for 1,083 glaciers**, 1984–2023.
+- Trained on **7,174** glacier contours + images, one time point each (7,171 after 3 blank masks are
+  dropped); **Dice 0.92** on the test set (computed as `torchmetrics.Dice(average='micro')`, i.e. pixel
+  accuracy, not glacier-overlap Dice).
+- Inference over **505,835 images for 1,083 glaciers**, 1984–2023. (Contradicted: 505,835 is every scene in S3
+  for 1,085 glaciers, with no pre-inference quality filter; two glaciers are dropped later by the analysis slice.)
 - Overall glacier surface-area decline of **0.2% ± 0.01% per year**, negative and significant in all
   five regions.
 
@@ -22,15 +25,18 @@ Per-region relative area change per year (log-linear regression):
 | **Total** | **−0.00199** | **0.00010** |
 
 Cumulative 1985–2022 declines from the bootstrap analysis: Europe 16.2%, Caucasus 9.1%, Asia 7.1%,
-South America 2.6%, North America 2.3%.
+South America 2.6%, North America 2.3%. (These appear only after `\end{document}` in the LaTeX, not in
+the paper text, and the period does not match the data, 1984–2023.)
 
 The GLIMS funnel, with the paper's numbers: **328,115** glaciers in the snapshot → **170,363** after
-"outline drawn after 2005" → **122,212** after excluding Arctic/Antarctic regions → **18,093** after
+"outline drawn after 2005" → **122,212** after excluding five GLIMS regional centres (RGI umbrella, GlobGlacier, NSIDC, Svalbard,
+Antarctic Peninsula; the paper says "Arctic/Antarctic regions", but those account for at most 2,310 of the
+48,151 glaciers removed) → **18,093** after
 the 1–50 km² area filter. That last number matches the repo exactly.
 
 The paper is a work in progress and carries `\editcom{}` notes; two of its own numbers are stale
-(the conclusion says "a dataset of 10,443 glaciers", which is really the 10,447-row
-`training_data_set.csv`, and its body text says 10 input channels where its channel figure says 9 —
+(the conclusion says "a dataset of 10,443 glaciers", which is the 10,447-row
+`training_data_set.csv`, an output of an older query that is not the source of the 7,174 trained images, and its body text says 10 input channels where its channel figure says 9 —
 the figure is right, see "Model contract").
 
 `docs/low_level_design.md` is the design doc — read it before changing anything in the data extraction,

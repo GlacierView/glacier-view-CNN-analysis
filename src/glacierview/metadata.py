@@ -143,8 +143,8 @@ def read_ee_metadata(
 ) -> pd.DataFrame:
     """Earth Engine's metadata for every scene, one row per ``file_name``.
 
-    Earth Engine sometimes returns more than one record for a scene; the first
-    is kept. ``include_version`` adds the column the training table carries
+    Two different scenes (adjacent WRS rows, same date) can share a file name,
+    because the name has no path/row; the first record is kept. ``include_version`` adds the column the training table carries
     and the inference table does not.
     """
     rows = []

@@ -27,7 +27,9 @@ logger = get_logger(__name__)
 MIN_OUTLINE_DATE = pd.Timestamp("2005-01-01")
 #: A judgement call to keep typical glaciers: nothing tiny, nothing unusually large.
 AREA_RANGE_KM2 = (1, 50)
-#: Catch-all regional centres whose outlines duplicate or overlap the others.
+#: Regional centres to leave out: RGI, GlobGlacier and NSIDC are catch-alls whose
+#: outlines duplicate or overlap the others; Svalbard and the Antarctic Peninsula
+#: are ordinary regional centres.
 EXCLUDED_REGIONS = (
     "Svalbard, Jan Mayen, and Bouvet",
     "Various (GlobGlacier)",

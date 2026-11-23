@@ -55,7 +55,7 @@ aws s3 cp --region us-west-1 <Athena result of inference_data_query_250.sql> \
   src/glims/data/inference_samples/filtered_inference_data_250.csv
 caffeinate -i uv run glacierview --logfile areas_s3.log areas-s3 \
   --file-list src/glims/data/inference_samples/filtered_inference_data_250.csv \
-  --checkpoint GlacierView/glacierview-unet --out-dir <dir>
+  --checkpoint GlacierView/glacierview-unet --preprocessing published --out-dir <dir>
 ```
 
 `--logfile` belongs to `glacierview` itself, so it goes before the subcommand.

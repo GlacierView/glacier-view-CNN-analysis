@@ -126,7 +126,8 @@ Checked by diffing local inventories against the buckets.
 **Missing, regenerable:** `areas_no_threshold.csv`, `areas_05_thresh.csv`, `areas_binary_05.csv` are
 outputs of the old inference script and are not on disk. The current `areas` run writes its
 per-glacier CSVs at the end of the run (`inference/batch.py`); the 250-glacier results are in
-`src/segmentation/areas_250/`.
+`src/segmentation/areas_250/`, made on 2026-11-03 with the pre-reference-grid pipeline at sigma 20
+(today's `--preprocessing published`).
 
 **Recovered (2026-09-19).** The four analysis inputs `areas_true_vs_predicted_final.ipynb`
 live in **`data/analysis/`**, committed (the blanket `*.csv` ignore has a negation for that

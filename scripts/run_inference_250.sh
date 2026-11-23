@@ -4,6 +4,9 @@
 #
 # Each batch of 25 glaciers is downloaded, segmented with the published model,
 # and deleted before the next, so only ~1.5 GB of imagery is ever on disk.
+# It uses `--preprocessing published`, the pipeline the published model was
+# trained on; the stored run in src/segmentation/areas_250/ (Nov 3, 2026)
+# predates the `current` pipeline and was made with this one.
 # DEMs (89 MB in all) are kept. The full run took about 2 hours on a MacBook
 # Air M4 (Nov 2026); the download sets the pace.
 #
@@ -74,5 +77,6 @@ mkdir -p "$OUT_DIR"
 caffeinate -i uv run glacierview --logfile "$OUT_DIR/areas_250.log" areas-s3 \
     --file-list "$FILE_LIST" \
     --checkpoint GlacierView/glacierview-unet \
+    --preprocessing published \
     --out-dir "$OUT_DIR" \
     "$@"

@@ -746,6 +746,9 @@ This matters for planning. In September 2024 the project expanded from 50 to 250
   (`src/segmentation/areas_250/`). The filtered file list on disk is
   `src/glims/data/inference_samples/filtered_inference_data_250.csv` (68,880 rows, 1,024 glaciers);
   the old `filtered_inference_data.csv` (50 vintage, 245 glaciers) no longer exists.
+  The run (2026-11-03) predates the per-glacier reference grid: it used the old preprocessing at
+  smoothing sigma 20, which `--preprocessing published` keeps. Rerun with that flag
+  (`scripts/run_inference_250.sh` passes it) to reproduce it, and the figures built from it.
 
 It is two steps: the selection query picks glaciers, the filter query picks those glaciers' files.
 The filter restricts glaciers by **joining on the selection**, not by re-ranking. ⚠️ Don't take the

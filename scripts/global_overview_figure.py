@@ -8,7 +8,7 @@ it gets a pair of panels, the earliest and latest predicted outline, joined
 to its point on the map. The change is measured as in
 ``region_gif_figure.relative_change``.
 
-Two layouts, each saved as PNG and PDF to figures/:
+Two layouts, each saved as PNG to figures/:
 
     global_overview_stacked   panels above and below the map
     global_overview_side      map on the left, panels stacked on the right
@@ -322,10 +322,9 @@ def side(points, picked, panels, land, out_stem) -> None:
 
 
 def _save(fig, out_stem) -> None:
-    for suffix in (".png", ".pdf"):
-        path = out_stem.with_suffix(suffix)
-        fig.savefig(path, dpi=DPI, facecolor="white")
-        logger.info("wrote %s", path)
+    path = out_stem.with_suffix(".png")
+    fig.savefig(path, dpi=DPI, facecolor="white")
+    logger.info("wrote %s", path)
     plt.close(fig)
 
 

@@ -73,7 +73,7 @@ their last three annual areas over the mean of their first three (from
 over at least 25 years and in at least 10. The change and the years it spans
 are in each cell's title.
 
-`global_overview_stacked.{png,pdf}` — the paper's introduction figure, with
+`global_overview_stacked.png` — the paper's introduction figure, with
 panels above and below the map. An Equal Earth map of the 7,174 glaciers
 trained on (which include all 1,024 inference glaciers), coloured by region,
 and for each region the glacier with the largest relative area loss among

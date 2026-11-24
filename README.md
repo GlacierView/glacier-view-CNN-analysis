@@ -121,7 +121,7 @@ export GV_DATA_ROOT=/Volumes/T7/GlacierView
 
 ## Model Architecture
 
-The glacier image segmentation model is based on the ResNet-50 architecture. The model takes an input image of 128x128 pixels with 7 bands, and produces a segmentation mask, where each pixel is classified as glacier or non-glacier. The ResNet-50 backbone is augmented with additional layers for semantic segmentation.
+The glacier image segmentation model is based on the ResNet-50 architecture. The model takes an input of 128x128 pixels with 9 channels (the 7 stored bands plus NDSI and NDWI), and produces a segmentation mask, where each pixel is classified as glacier or non-glacier. The ResNet-50 backbone is augmented with additional layers for semantic segmentation.
 
 ## Dataset
 

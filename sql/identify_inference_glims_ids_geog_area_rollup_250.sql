@@ -8,8 +8,10 @@
 -- survives twice: as an Athena result at
 --   s3://glacier-view-athena-output-us-west-1/Unsaved/2024/09/11/
 --     21704e69-c2cd-4856-82a1-88ed19a22d27.csv
--- and in the repo as src/glims/data/inference_samples/geog_area_rollup_250.csv
--- The two are byte-identical. That output pins every parameter below:
+-- and on the local data disk as
+--   src/glims/data/inference_samples/geog_area_rollup_250.csv (gitignored)
+-- The two are byte-identical, and a re-run on 2026-10-30 reproduced them byte
+-- for byte. That output pins every parameter below:
 --
 --   1,024 rows                      -> 250 per rollup, with ties
 --   max(geog_size_rank) = 250       -> the rank cutoff

@@ -7,17 +7,23 @@ Data flows in one direction; each stage writes files that the next stage reads.
    and write the shapefile plus `data/glims_18k.parquet` for Athena.
 2. **Earth Engine pull** — notebooks 03–05 drive `glacierview.earthengine.EePull`, which downloads
    one GeoTIFF per image via `geemap.ee_export_image` at 30 m scale, plus a NASADEM per glacier.
-   Server-side filters: `CLOUD_COVER <= 10`, `IMAGE_QUALITY == 9` (`IMAGE_QUALITY_OLI` for L8).
+   The code today filters server-side on `CLOUD_COVER <= 10` and `IMAGE_QUALITY == 9`
+   (`IMAGE_QUALITY_OLI` for L8), but those filters were added for the September 2024 inference pull.
+   The **training** pull (2023, ±50 days of `src_date`) ran without them: of its 313,766 scenes,
+   200,324 have cloud cover > 10 (up to 100) and 18,122 have quality < 9 (L5/L7 only). Cloud and
+   quality are first enforced for training in the SQL (stage 4), so re-running notebook 03 with the
+   current code would download a subset of the original scenes.
    Each image's `getInfo()` JSON is appended to `meta_data/metadata_list_l{5,7,8}` alongside the tifs,
    and a log line per image goes to the run log.
 3. **Metadata relationalization** — notebooks 06 (training) and 07 (inference) drive
-   `glacierview.metadata`: parse the pull log, dedupe the EE metadata (EE sometimes returns >1 record
-   per image), open each tif for image/file attributes, and write CSVs → S3 → AWS Glue → Athena
+   `glacierview.metadata`: parse the pull log, dedupe the EE metadata (two different scenes from adjacent
+   WRS rows on the same date share a file name, because `scene_filename` has no path/row; the first is kept), open each tif for image/file attributes, and write CSVs → S3 → AWS Glue → Athena
    (database `glacier-view` in us-west-1 — see "Athena / Glue" below). Before 2026-10-23 the log
    parser kept only the hour of `scene_center_time`; CSVs written earlier carry that truncated value.
 4. **SQL filtering** — `sql/` queries run against Athena to pick which GLIMS IDs and which individual
    files are eligible. `identify_inference_*` picks glaciers (N per `geog_area_rollup`);
-   `inference_data_query.sql` / `training_data_query.sql` pick files. Criteria: cloud cover < 5%,
+   `training_data_query.sql` and `inference_data_query_250.sql` pick files (the older
+   `inference_data_query.sql` is the 50-per-region vintage). Criteria: cloud cover < 5%,
    summer months only (May–Oct northern hemisphere, Nov–Apr southern), > 50,000 pixels,
    0 no-data pixels, < 10% zero pixels.
 5. **Training-set build** — notebook 09 rasterizes GLIMS outlines into masks on each glacier's

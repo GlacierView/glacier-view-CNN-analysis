@@ -56,19 +56,20 @@ sample (`data/sample/inference`) instead of the full landing zone.
 
 | Notebook | What it does |
 |---|---|
-| `regional_decline.ipynb` | The published analysis. Estimates each region's decline from the 1,085-glacier area series, as a bootstrapped log-linear trend and as a weighted mean of per-glacier slopes. Reads `data/analysis/`. |
+| `regional_decline.ipynb` | The analysis behind the paper's regional results. Estimates each region's decline from the 1,085-glacier area series, as a bootstrapped log-linear trend and as a weighted mean of per-glacier slopes. Reads `data/analysis/`. |
 
-It reproduces the published numbers exactly, including two quirks of the original code that are
-kept behind flags:
-- **Two glaciers were dropped** (Trient and `G007045E45994N`) by a positional slice, which is why the
-  paper reports 1,083 glaciers.
+It reproduces Table II only with observation-count weights and all 1,085 glaciers. Two quirks of the
+original code are kept behind flags, but neither shaped the paper's table or histograms (with the
+default flags the notebook does not reproduce the Europe row):
+- **Two glaciers were dropped** (Trient and `G007045E45994N`) by a positional slice, giving 1,083
+  glaciers; the paper's Europe value needs all 199 Europe glaciers.
 - **The slope weights are inverted:** each glacier is weighted by the share of years *missing*, so
-  glaciers with more data count less. Corrected, North America's decline goes from the slowest to in
-  line with Asia; see `.agents/context/state.md`.
+  glaciers with more data count less. This affected only the original bootstrap histograms;
+  see `.agents/context/state.md`.
 
 The original also computed each glacier's error against its GLIMS area but never used it to filter
-anything; the rewrite keeps the error as a diagnostic. Oceania's 35 glaciers aren't in the paper's
-five regions and are left out.
+anything; the rewrite keeps the error as a diagnostic. Oceania's 35 glaciers never reach inference (the SQL
+filters remove them), so they are not in the area series.
 
 ## Not here any more
 

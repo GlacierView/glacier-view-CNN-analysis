@@ -1,5 +1,6 @@
 Screen Shot*
 *.csv
+*.log
 *.pyc
 .DS_Store
 .ipynb_checkpoints
@@ -63,6 +64,8 @@ data/sample/inference/segmentation/
 # !figures/** so that .DS_Store stays ignored.
 !figures/*.png
 !figures/*.jpg
+!figures/*.gif
+!figures/*.pdf
 !figures/*.drawio
 !figures/*.pgw
 !figures/inventory-examples/*.png

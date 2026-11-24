@@ -48,12 +48,43 @@ evidence behind excluding them from the training set:
 
 ## `regional-decline/`
 
-The published per-region regression figures, from
-`notebooks/analysis/regional_decline.ipynb`: estimated area for individual
+Per-region regression figures from
+`notebooks/analysis/regional_decline.ipynb` (these Python plots match only the paper's commented-out figure;
+the paper's active figure uses base-R plots from code not in this repo): estimated area for individual
 glaciers, the pointwise average, and the fitted log-linear trend.
 
 `asia-reg.png`, `caucausus-reg.png`, `europe-reg.png`,
 `north-america-reg.png`, `south-america-reg.png`.
+
+## Model output
+
+`largest_glaciers_by_region.gif` — the three largest glaciers (by GLIMS area)
+in each region of the 250-per-region set, one row per region, one frame per
+year 1984–2023. Each cell shows that glacier's latest scene up to the frame's
+year, with the model's mask (probability > 0.5) outlined and the binary area
+beneath. Each title gives the glacier's relative change, measured as for the
+figure below, and the years it spans. The set has no Oceania glaciers, so
+there are five rows.
+
+`most_shrinking_glaciers_by_region.gif` — the same layout, for the three
+glaciers per region that lost the largest share of their area: the mean of
+their last three annual areas over the mean of their first three (from
+`src/segmentation/areas_250/areas_binary_05.csv`), among glaciers observed
+over at least 25 years and in at least 10. The change and the years it spans
+are in each cell's title.
+
+`global_overview_stacked.png` — the paper's introduction figure, with
+panels above and below the map. An Equal Earth map of the 7,174 glaciers
+trained on (which include all 1,024 inference glaciers), coloured by region,
+and for each region the glacier with the largest relative area loss among
+those whose predicted starting area is over 10 km²: its earliest and latest
+outline, with the earliest dashed over the latest where the two scenes share a
+footprint. Made by `scripts/global_overview_figure.py`; the trained-on list is
+`data/analysis/trained_glims_ids.csv`, read from the training bucket.
+
+The two GIFs are made by `scripts/region_gif_figure.py` (`--select largest` or
+`--select shrinkage`), which also writes each glacier's own GIF to
+`src/segmentation/gifs/by_region/`.
 
 ## Logos
 

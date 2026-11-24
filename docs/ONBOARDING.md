@@ -56,9 +56,11 @@ before the code — it tells you what the code was *for*.
 
 What it claims:
 
-- Trained on **7,174** glacier outlines and their images, one time point each.
+- Trained on **7,174** glacier outlines and their images, one time point each (7,171 are used after
+  3 blank masks are dropped).
 - **Dice score 0.92** on the held-out test set.
-- Applied to **505,835 images across 1,083 glaciers**, spanning **1984–2023**.
+- Applied to **505,835 images across 1,083 glaciers**, spanning **1984–2023**. (In S3, 505,835 is every
+  scene of 1,085 glaciers with no pre-inference filter; 1,083 is the paper's count after the analysis slice.)
 - Overall glacier surface-area decline of **0.2% ± 0.01% per year**, negative and statistically
   significant in all five regions.
 
@@ -74,15 +76,20 @@ Per-region relative area change per year, by log-linear regression:
 | **Total** | **−0.00199** | **0.00010** |
 
 Cumulative declines 1985–2022 from the bootstrap analysis: Europe 16.2%, Caucasus 9.1%, Asia 7.1%,
-South America 2.6%, North America 2.3%. About two-thirds of individual glaciers shrank; some grew.
+South America 2.6%, North America 2.3%. (These numbers appear only after `\end{document}` in the LaTeX,
+and 1985–2022 does not match the data's 1984–2023.) The paper says about two-thirds of individual
+glaciers shrank; from the stored areas, 880 of 1,085 (81%) have a negative slope (75% to 88% per region).
 
 **Numbers worth memorizing**, because they recur everywhere and let you tell datasets apart at a
 glance: **328,115** glaciers in GLIMS → **18,093** after selection → **10,447** candidate training
-images → **7,174** actually trained on → **1,083** glaciers for inference → **505,835** images.
+images (an older query's output, not the source of the training set) → **7,174** training pairs stored
+(**7,171** actually trained on, after 3 blank masks) → **1,085** glaciers inferred (**1,083** in the
+paper, after the analysis slice) → **505,835** images.
 
 The paper is a live draft with `\editcom{}` review notes in it, and two of its own numbers are
 stale: the conclusion says "a dataset of 10,443 glaciers" (that's the 10,447-row
-`training_data_set.csv`, and they're images not glaciers), and its body text says 10 input channels
+`training_data_set.csv`, an older query's output that is not the source of the 7,174 trained images;
+and they're images not glaciers), and its body text says 10 input channels
 where its own channel figure says 9. The figure is right — see Part 7, this matters a lot.
 
 ### Why this is harder than it sounds
@@ -245,7 +252,7 @@ Here there are two classes: not-glacier (0) and glacier (1).
 with **ImageNet weights** — i.e. pretrained on millions of ordinary photographs. This is **transfer
 learning**: general-purpose edge/texture detectors learned from photos of cats transfer usefully to
 satellite imagery, so you need far less glacier training data. One wrinkle: ResNet-50 expects 3
-channels (RGB) and we have 10, so its very first layer is surgically replaced (see Part 7).
+channels (RGB) and we have 9, so its very first layer is surgically replaced (see Part 7).
 
 **Freezing** — holding the pretrained encoder's weights fixed while only the decoder learns. The
 production checkpoint is named `unet_summer_model_unfrozen_100`, which reads as: trained on summer
@@ -325,7 +332,8 @@ EE access and `ee.Authenticate()` once.
 
 The class `EePull` has `export_landsat(satellite, ...)` for one satellite, `export_all_landsat(...)` for
 all three, and `export_dem(...)`. Each Landsat export builds an **ImageCollection** and filters it
-*server-side* — which
+*server-side* (as the current code does, and as the September 2024 inference pull did; the 2023
+training pull ran without the cloud and quality filters) — which
 matters, because filtering server-side means you never pay to download images you'd throw away:
 
 ```python
@@ -336,7 +344,8 @@ ee.ImageCollection('LANDSAT/LT05/C02/T1_L2')
   .filter(ee.Filter.eq('IMAGE_QUALITY', 9))      # IMAGE_QUALITY_OLI for Landsat 8
 ```
 
-Per the LLD these filters cut the collection by about **63%**. The LLD also notes, self-critically,
+Per the LLD, the filters cut the collection by about **63%**, a figure measured with cloud cover set to 5
+rather than the `<= 10` shown here. The LLD also notes, self-critically,
 that the summer-month filter *could* have been pushed server-side too and wasn't ("… yeah probably,
 next time") — so summer filtering happens later, in SQL, after paying to download winter images.
 
@@ -364,8 +373,9 @@ Now you have half a million tifs and a pile of JSON. This stage makes it queryab
 `image_attributes` is the expensive one — it opens and scans every single file.
 
 Two quirks worth knowing:
-- **Earth Engine sometimes returns more than one metadata record for the same image**, commonly with
-  two different cloud-cover values. The handler de-duplicates, picking one arbitrarily, to guarantee
+- **Two different scenes can share a file name**: adjacent WRS rows on the same date collide because
+  the file name has no path/row, so there are two metadata records (commonly with different
+  cloud-cover values) for one filename. The handler de-duplicates, keeping the first, to guarantee
   one row per filename.
 - The LLD admits the metadata file layout is awkward ("tech debt — we could've been a lot cleaner…
   the script which relationalizes these metadata has to navigate a strange file structure").
@@ -380,7 +390,7 @@ The CSVs go to S3, an **AWS Glue crawler** infers their schema, and they become 
 Two different questions, answered by near-identical queries:
 
 **"Which glaciers should we work on?"** — `identify_inference_glims_ids_geog_area_rollup_50.sql`
-ranks glaciers by `db_area` *within each of the five regions* (`dense_rank() over(partition by
+ranks glaciers by `db_area` *within each region* (six rollups exist; Oceania has no glacier that passes the filters, so five appear) (`dense_rank() over(partition by
 geog_area_rollup order by db_area desc)`) and takes the top 50 per region. Ranking within region
 rather than globally is deliberate: it stops the biggest-glacier regions from crowding everyone out.
 
@@ -439,49 +449,58 @@ from SQL, and preprocess each scene exactly as inference does (reference grid, f
 masked then filled with the scene mean, 128×128), stack the DEM on as a final channel, and write
 matched `images/` and `masks/` tifs to `processed_training_data_reference_grid/`.
 
-**One step the paper documents that's easy to miss: training images are temporal composites, not
-single scenes.** All Landsat scenes within a **±100-day window** of the GLIMS `src_date` (the
-outline's as-of date) were downloaded and combined by **arithmetic mean**, to average away shadows,
-debris and transient defects. So "one training image per glacier" means one *averaged* image, built
-from however many scenes happened to be available in that window — which varies per glacier.
+**Training images are single scenes, not temporal composites.** Notebook 03 downloads every Landsat
+scene within **±50 days** of the GLIMS `src_date` (the outline's as-of date), a 100-day window. The
+training SQL then keeps exactly one of them per glacier: the most recent scene that passes the cloud,
+quality and pixel filters (`rank_score = 1`), and only if it falls in a low-snow month. Notebook 10
+builds each training image from that one file, and names the output after it. So "one training
+image per glacier" means one dated scene. Shadows, debris and defects are avoided by choosing a
+clean scene, not by averaging.
+
+⚠️ The paper's Section III says the scenes in the window were "averaged across time using an
+arithmetic mean". No code does this, and the paper's own abstract says the model was trained on
+images "each at only one time point". The averaging sentence should be removed from the paper. The
+only temporal smoothing in the project is the Gaussian filter applied at *inference* (Stage 7).
 
 The paper also describes reprojecting the **rasters** to WGS 84 to match the polygons, whereas
 notebook 09 reprojects the **polygons** into each raster's UTM CRS. Same goal, opposite
 direction. Probably an evolution in approach; don't assume either description matches how a given
 artifact on disk was produced.
 
-**⚠️ The channel count produced here does not match what `train.py` expects.** This is the single
-most important thing to understand about this repo — full detail in Part 7.
+**The channel count produced here matches what `glacierview train` expects.** `build_training_pair`
+writes 7 channels and `GlacierDataset` adds NDSI and NDWI to make 9. (An old mismatch with the
+2023 `train.py` is fixed.) This is the single most important thing to understand about this repo —
+full detail in Part 7.
 
 ### Stage 6 — Train
 
 **Where:** `glacierview.training` (`dataset.py`, `losses.py`, `trainer.py`), driven by
 `glacierview train`
 
-A single 593-line script, no functions to speak of, runs top to bottom: build a CSV of
-image/mask paths (dropping near-blank masks via `img.var() > 0.001`), 90/10 train/test split, a
-`GlacierDataset` that normalizes per-image and computes NDSI/NDWI on the fly, random flips and
-blurs for augmentation, then the U-Net, Adam, cross-entropy, and an evaluation printing mean Dice
-and Jaccard. Saves to `experiments/<counter>/model` **and** overwrites
-the configured output directory.
+Function-based: `build_manifest` builds the image/mask pairs (dropping near-blank masks via
+`img.var() > 0.001`), the holdout is split 90/5/5 into train/eval/test, a `GlacierDataset` computes
+NDSI/NDWI on the fly (no per-image normalization by default), random flips and blurs augment each
+sample, then `trainer.fit` runs the U-Net with Adam and cross-entropy, keeps the epoch with the lowest
+eval loss, and scores Dice and Jaccard on the test split. It writes `model.state_dict.pt` and
+`run.json` to `--out-dir`.
 
-Hyperparameters are a mix of CLI flags (`--epochs --lr --decay --batch`) and module-level constants
-you have to edit in the file (`LOSS`, `TRANSFORMS`, `NORMALIZE`, `UNFREEZE_WEIGHTS`, …). Note
-`SHUFFLE_DATASET = False`, which is unusual for training.
+Hyperparameters are CLI flags (`--epochs --lr --batch-size --loss --freeze-encoder ...`) with
+`TrainConfig` defaults.
 
-⚠️ **The script's defaults are not the published recipe.** `--batch` defaults to 2; the paper used
-**32**. The script also has no evaluation set and keeps whatever the last epoch produced, while the
-paper selected the epoch that minimized cross-entropy on a held-out eval split. Full comparison table
-in Part 7.
+(The deleted 2023 `train.py` was a single 593-line script with a bare 90/10 split, per-image
+normalization, `--batch` defaulting to 2, `SHUFFLE_DATASET = False`, no evaluation set, and the last
+epoch kept. Reproducing the paper's exact numbers needs that old script.) The current batch
+size (32) and best-eval-epoch selection follow the paper's description. Full
+comparison table in Part 7.
 
 ### Stage 7 — Inference
 
 Two entry points that do overlapping things differently:
 
 **`glacierview infer`** — one glacier, via `--glims-id`. Reads that glacier's
-images, preprocesses, predicts, writes a GIF (every 5th frame) and a surface-area plot. Note it
-plots `np.sqrt(np.sum(prediction))` and titles it "Estimated Surface Area (no units)" — that square
-root is *not* an area, and this path is best read as a visual sanity check, not a measurement.
+images, preprocesses, predicts, writes a GIF (every 5th frame) and a surface-area plot. It plots the
+binary-mask area series in km² (`result["areas"]["binary"]`) with the title "<id> estimated surface
+area". (An older version plotted `np.sqrt(np.sum(prediction))`, which was not an area.)
 
 The paper's stated order of operations is: **sort by date → resize to 128×128 → Gaussian-smooth
 along the time axis → compute NDSI/NDWI → CNN → resize back → count pixels.** That temporal smoothing
@@ -523,16 +542,16 @@ year. That's why every result is a relative rate rather than an absolute one.
 Two estimators are reported: (1) fit the regression per glacier, then take a **weighted average** of
 the slopes across a region, weighting by each glacier's number of valid observations; (2) take the
 **geometric mean** across glaciers at each timestamp, then regress that single averaged series
-(weighted, since each timestamp averages a different number of glaciers). Confidence intervals come
-from a **bootstrap** — resample glaciers with replacement, refit, take the 2.5th/97.5th percentiles
-(100 iterations for the regression variant, 500 for the slope variant).
+(weighted, since each timestamp averages a different number of glaciers). The bootstrap —
+resample glaciers with replacement, refit, take the 2.5th/97.5th percentiles (100 iterations for the
+regression variant, 500 for the slope variant) is used only in the notebook's own plots; the intervals
+in the paper's figure are mean ± 2 weighted-least-squares standard errors.
 
-⚠️ One thing to check in the code if you touch this: the paper's methods text gives the weight as
-`(total_rows − valid_observations) / total_rows`, which is the proportion of data **missing** — yet
-the surrounding sentence says it "gives greater influence to glaciers with more complete time
-series." Those contradict each other. Either the formula or the description is wrong, and it affects
-every weighted average in the results. Worth verifying against the actual regression script before
-trusting or reproducing the weighting.
+⚠️ One thing to know if you touch this: a formula `(total_rows − valid_observations) / total_rows`
+(the proportion of data **missing**) appears in the LaTeX source, but only after `\end{document}`, in
+an unused "Extra stuff" block (bare_jrnl.tex:1241); it is not paper text, and it contradicts the
+sentence that weighting "gives greater influence to glaciers with more complete time series." The
+paper's reported averages use observation-count weights, not that formula.
 
 ---
 
@@ -593,6 +612,8 @@ See `notebooks/README.md` for a per-notebook description. In short:
 | `training_data_query.sql` | One representative summer image per glacier. |
 | `inference_data_query.sql` | All qualifying summer images per glacier (`rank_score` commented out — that one line is the difference between a snapshot and a 40-year series). |
 | `identify_inference_glims_ids_geog_area_rollup_50.sql` | Top 50 glaciers per region by `db_area`. |
+| `identify_inference_glims_ids_geog_area_rollup_250.sql` | Top 250 glaciers per region by `db_area` — 1,024 glaciers. One row per glacier, from the *training* tables: a glacier list, not a file list. |
+| `inference_data_query_250.sql` | All qualifying summer images for those 1,024 glaciers, from the `_250` tables — the file list to pull from `full-time-series-images-t1-l2-sr`. Embeds the selection query, so it runs standalone. |
 | `denormalized_training_metadata.sql` | De-dupes `ee_metadata` by version, coalesces the two image-quality columns. |
 
 `identify_inference_glims_ids_geog_area_rollup_250.sql` is a **reconstruction**,
@@ -601,9 +622,11 @@ was never saved; the console history is not readable with the team IAM role.
 But the reconstruction is verified rather than guessed: the query's output
 survives as both an Athena result in
 `s3://glacier-view-athena-output-us-west-1/Unsaved/2024/09/11/` and as
-`geog_area_rollup_250.csv` in the repo — byte-identical — and that output pins
-every parameter. It differs from the `_50` query by one value,
-`geog_size_rank <= 250`. The file's header comment records the evidence.
+`src/glims/data/inference_samples/geog_area_rollup_250.csv` (gitignored, so only
+on a local data disk) — byte-identical — and that output pins every parameter.
+It differs from the `_50` query by one value, `geog_size_rank <= 250`. The
+file's header comment records the evidence. Re-running it on 2026-10-30
+reproduced the 2024 result byte for byte.
 
 Note it reads the **training** metadata tables, not the `_250` ones: glacier
 selection happens before the inference imagery exists, so the `_250` tables are
@@ -709,22 +732,29 @@ There are also `glacier-view-trient-only` and `test` databases in us-west-1, and
 clean ones above. The committed SQL uses unqualified names, so set your Athena database to
 `glacier-view` and it resolves.
 
-### The 250-glacier expansion is half-finished
+### The 250-glacier expansion: data ready, inference run
 
 This matters for planning. In September 2024 the project expanded from 50 to 250 glaciers per region:
 - ✅ The imagery was downloaded — the bucket holds 1,101 glaciers.
 - ✅ The metadata was processed and crawled — the `_250` tables exist and are populated.
-- ✅ The glacier list exists — `geog_area_rollup_250.csv`, **1,024 unique glaciers**. (Not 1,250:
-  Caucausus only yielded 74 and Europe 199 before running out of qualifying glaciers; Asia 250,
-  South America 250, North America 251.)
-- ❌ **The per-file filtering was never done for it.** The SQL file is empty (0 bytes), and the only
-  filtered file list on disk — `filtered_inference_data.csv` — covers **245 glaciers** (50 per
-  region, South America 45), i.e. the *old* 50 vintage.
+- ✅ The glacier list exists — `identify_inference_glims_ids_geog_area_rollup_250.sql`,
+  **1,024 unique glaciers**. (Not 1,250: Caucausus only yielded 74 and Europe 199 before running
+  out of qualifying glaciers; Asia 250, South America 250, North America 251.)
+- ✅ The per-file filter exists — `inference_data_query_250.sql`. Verified 2026-10-30:
+  **68,880 files across all 1,024 glaciers, 57.5 GB**, every file present in the bucket.
+- ✅ Inference has been run on it: `areas-s3` over the 1,024 glaciers, all succeeded
+  (`src/segmentation/areas_250/`). The filtered file list on disk is
+  `src/glims/data/inference_samples/filtered_inference_data_250.csv` (68,880 rows, 1,024 glaciers);
+  the old `filtered_inference_data.csv` (50 vintage, 245 glaciers) no longer exists.
+  The run (2026-11-03) predates the per-glacier reference grid: it used the old preprocessing at
+  smoothing sigma 20, which `--preprocessing published` keeps. Rerun with that flag
+  (`scripts/run_inference_250.sh` passes it) to reproduce it, and the figures built from it.
 
-So the expansion's data is sitting in S3, catalogued, waiting for a filter query that was never
-written. Reconstructing it means adapting
-`identify_inference_glims_ids_geog_area_rollup_50.sql` — change `geog_size_rank <= 50` to `<= 250`
-and point it at the `_250` tables.
+It is two steps: the selection query picks glaciers, the filter query picks those glaciers' files.
+The filter restricts glaciers by **joining on the selection**, not by re-ranking. ⚠️ Don't take the
+shortcut of pointing `inference_data_query.sql` at the `_250` tables with `geog_size_rank <= 250`:
+the `_250` tables hold 77 glaciers beyond the 1,024, and ranking over that larger population
+swaps 23 glaciers in Asia and South America.
 
 ---
 
@@ -944,6 +974,15 @@ background agreement). Both plus 18 legacy Keras `.h5` files are backed up to
 `s3://segmentation-model-gv/checkpoints/` with a `MANIFEST.md`. Bucket
 versioning there is still off, so an overwrite is unrecoverable.
 
+> **Updated method (2026-11-11).** The 0.8681 / 0.8261 above were measured
+> with the training loader's old `+1` min-max rescale, which inference never
+> applies. Scored on inputs as at inference, the published model reaches
+> **glacier Dice 0.906** (the 2023 checkpoint: 0.868). The paper's 0.92 is
+> most likely `torchmetrics.Dice(average='micro')`, which on binary masks is
+> pixel accuracy (0.931 here). The training default is now `normalize=False`.
+> Details are in `docs/MODEL_MANIFEST.md`, "Updated method"; reproduce with
+> `scripts/score_checkpoint.py`.
+
 ### Training recipe
 
 The CLI defaults **are** the published recipe:
@@ -960,8 +999,8 @@ The CLI defaults **are** the published recipe:
 | model selection | epoch minimising eval loss |
 
 Augmentation: vertical flip, horizontal flip, and a 3×3 Gaussian blur
-(σ = 0.8), each applied **independently at p = 0.5** — about 75% more data,
-not the 4× you would get applying all three every time.
+(σ = 0.8), each applied **independently at p = 0.5**. The paper calls this about 75% more data, but
+augmentation is on the fly and replaces each sample, so the training set does not grow.
 
 Reported result: **Dice 0.92**. The ablation trail from the paper:
 
@@ -992,8 +1031,9 @@ reproducing its exact numbers needs the pre-refactor script from git history.
 
 - **The package** — installs with `uv sync`, all submodules import, all CLI
   subcommands run, a released checkpoint loads and runs a forward pass.
-- **Training data** — 7,174 image/mask pairs. `build_manifest` yields
-  6,453 train / 359 eval / 359 test, matching the paper's 6,456/359/359.
+- **Training data** — 7,174 image/mask pairs. `build_manifest` yields 7,171 pairs (3 blank masks
+  dropped), split 6,453 train / 359 eval / 359 test. The paper's 6,456 is 90% of the pre-filter 7,174,
+  so the train count does not match.
 - **A training fixture** — `data/sample/training`, 32 pairs, committed. Enough
   to smoke test training with no download.
 - **An inference fixture** — `data/sample/inference`, every Trient scene plus its DEM,
@@ -1001,13 +1041,13 @@ reproducing its exact numbers needs the pre-refactor script from git history.
   through the sample's quality filter, or 1,733 of its 1,748 (from November 1984) with
   `--no-filter`. `--preprocessing published --no-filter` gives the published 7.41 → 6.31 km². It also holds one scene, DEM and mask for 100 more glaciers.
 - **Inference DEMs** — all 1,122, matching the bucket's ID set exactly.
-- **Inference metadata** — the four table CSVs plus `filtered_inference_data.csv`.
+- **Inference metadata** — the four table CSVs plus `filtered_inference_data_250.csv`.
 - **Analysis inputs** — the four CSVs in `data/analysis/`:
 
 | File | Shape | What it is |
 |---|---|---|
 | `geo_areas.csv` | 18,093 × 32 | The `glims_18k` table: `glac_id`, `db_area`, `geog_area`, `geog_area_rollup`, `bboxes`, elevations. The join key for regional grouping. |
-| `training_data_set.csv` | 10,447 × 12 | Output of `training_data_query.sql` — candidate training images with quality metadata. This is the paper's stale "10,443". |
+| `training_data_set.csv` | 10,447 × 12 | Output of an older version of `training_data_query.sql` (660 Canada rows; not the source of the trained set) — candidate training images with quality metadata. This is the paper's stale "10,443". |
 | `training_areas.csv` | 3 × 260 | A transposed lookup: ~259 glacier IDs → areas. |
 | `areas_binary_05_filtered_smooth_25.csv` | 541 dates × **245** glaciers | Smoothed batch output, wide format. |
 
@@ -1021,7 +1061,7 @@ filtered set, not the bucket's 486 GB. See Part 9.
 ### Still open
 
 1. **The paper's 0.92 Dice does not reproduce.** The published checkpoint
-   scores 0.868 on a held-out slice, and batching is ruled out as the cause.
+   scored 0.868 on a held-out slice with the old `+1` rescale (0.906 without it), and batching is ruled out as the cause.
    Most likely a different metric definition; see `docs/MODEL_MANIFEST.md`.
 4. **Is the GLAMOS comparison still current?** A 14% underestimate on Trient
    in 2006 belongs in the paper's limitations if it holds.
@@ -1113,15 +1153,17 @@ uv run glacierview infer --glims-id G007026E45991N \
 ```
 
 Success is a GIF showing the ice boundary moving over 40 years. Compare
-against the ~150 GIFs already in `src/segmentation/gifs/`.
+against the 31 GIFs already in `src/segmentation/gifs/by_region/`.
 
-The paper documents Trient in detail: 464 images, 1984-04-18 to 2023-10-07,
-decline concentrated in 1985–1988 and 2002–2015, roughly stable over the last
-decade. Two caveats — the paper's Trient run used looser filters (cloud < 20,
-zero pixels < 15%), so image counts will not match unless you match the
-filters; and the Swiss GLAMOS inventory measured Trient at 5.76 km² in 2006
-against the model's 4.95 km², a **14% underestimate**. Expect a level offset
-even when the trend is right.
+The paper documents Trient as 464 images, 1984-04-18 to 2023-10-07, with
+decline concentrated in 1985–1988 and 2002–2015 and roughly stable over the last
+decade. Current code does not reproduce this: the committed sample gives 1,748
+scenes and the filtered run 62; 464 appears only if Landsat 8 is included. The
+paper's looser filters (cloud < 20, zero pixels < 15%) appear in no commit, so
+image counts will not match. The paper's GLAMOS comparison (5.76 km² in 2006
+against the model's 4.95 km², a 14% underestimate) comes from a commented-out
+line in the LaTeX; stored series give 6.98 (2024 xlsx) and 6.53 (current areas_250)
+km² for 2006, and no artifact supports 4.95.
 
 ### Step 5 — scaling up without pulling 486 GB
 
@@ -1133,6 +1175,11 @@ happened to download.
 
 `aws s3 sync` was too slow for the original upload; `cp --recursive` is what
 was used. Always exclude `.DS_Store` (some are 660 KB) and `meta_data/`.
+
+For the 250-per-region set (1,024 glaciers / 57.5 GB) you don't need the disk
+space: `glacierview areas-s3 --file-list <output of inference_data_query_250.sql>`
+pulls a batch of glaciers from S3, segments them, deletes them and moves on,
+and resumes if rerun. See `.agents/skills/run-inference/SKILL.md`.
 
 ### Step 6 — full training run
 
@@ -1167,11 +1214,13 @@ Ordered by how likely they are to cost you a day.
    ~6,250 ground pixels for an 8-band image. The design doc calls this out as
    a known mistake. Do not reason about them as ground-pixel counts.
 3. **Cloud cover is filtered twice, at different thresholds.** `<= 10`
-   server-side at download (`earthengine/export.py`), then **`< 5`** in the
-   pre-inference SQL. Verified against the data: both
-   `filtered_inference_data.csv` and `filtered_training_data_summer_months.csv`
-   top out at 4.99 and 4.34 with zero rows at or above 5, so `< 5` is what
-   produced the published results. The design doc's note about relaxing the
+   server-side at download (`earthengine/export.py`; the September 2024 inference pull only, the
+   2023 training pull had no such filter), then **`< 5`** in the
+   pre-inference SQL. The filtered selection outputs
+   top out at 4.99 and 4.34 with zero rows at or above 5, but the published
+   results did not use this SQL filter: 505,835 is every scene in S3 for the
+   1,085 glaciers, and earlier-pull glaciers (e.g. Trient, cloud up to 100) were not
+   filtered server-side either. The design doc's note about relaxing the
    threshold to 10 only ever reached the download step. Consequence worth
    knowing: **there is downloaded imagery between 5 and 10 cloud cover that
    inference has never used.** Relaxing the SQL would add images with no new
@@ -1242,9 +1291,10 @@ When sources disagree, this is the precedence order:
 
 1. **The checkpoints and the data on disk.** Byte-level facts beat every document, and where this
    guide makes a claim about channels, shapes or counts it was checked against them.
-2. **The paper.** Authoritative on the *intended* design and on every published number: the 9
-   channels, the training recipe, the results. Its figures are more current than its body text, and
-   it carries two stale numbers of its own (noted in Part 1).
+2. **The paper.** A guide to the *intended* design (the 9 channels, the training recipe), but not
+   authoritative on its own numbers: several are contradicted by the code and data (training counts,
+   augmentation growth, the Dice metric, the inference set). Its figures are more current than its
+   body text, and it carries two stale numbers of its own (noted in Part 1).
 3. **This document** and `.agents/` — written from reading the code, querying AWS, and reading the
    paper. `.agents/` is the agent-facing source of truth; this document is the long-form narrative
    it points back to.
@@ -1257,7 +1307,7 @@ When sources disagree, this is the precedence order:
 6. **`README.md`** — the oldest of these (Nov 2023). Its directory layout
    (the training output directory, `inference/src`) partly predates the current tree, and it
    describes the model as taking "128x128 pixels with 7 bands" — which is neither the 8-channel
-   design nor the 10-channel model input. Treat as historical.
+   design nor the 9-channel model input. Treat as historical.
 
 ### Open questions
 
@@ -1265,21 +1315,28 @@ When sources disagree, this is the precedence order:
 
 - ~~Which channels was the model trained on?~~ **Nine**: NDWI, NDSI, blue, green, red, nir, swir,
   thermal, DEM. `swir_2` was dropped for quality. Confirmed directly against both checkpoints.
+- ~~Are training images temporal composites?~~ **No.** The paper's Section III says scenes in the
+  100-day window were averaged by arithmetic mean, but the training SQL keeps one scene per glacier
+  and no code composites. The paper's abstract ("each at only one time point") agrees with the
+  code. The window is ±50 days, not ±100.
 - ~~Where are the four analysis CSVs?~~ Recovered, now in `data/analysis/`.
 - ~~Where is the 1,083-glacier areas output?~~ **Recovered**:
   `data/analysis/areas_binary_05_filtered_smooth_f.xlsx`, 1,085 glacier columns. Replicating the
-  notebook's annual-mean grouping and regressing per region gives exactly the paper's 1,083.
+  notebook's annual-mean grouping and regressing per region reproduces the paper's Table II; the
+  paper's regional results use all 1,085 glaciers, not 1,083.
 - ~~Cloud-cover threshold: 5 or 10?~~ **Both, at different stages.** `<= 10` server-side at
-  download, `< 5` in the pre-inference SQL. Verified against the filtered file lists, which top out
+  download (September 2024 inference pull only), `< 5` in the pre-inference SQL (not applied to the
+  published run's 505,835 images). The filtered file lists top out
   at 4.99 and 4.34 with no rows at or above 5. The design doc's relaxation to 10 only reached the
   download step.
-- ~~Is the regression weighting correct?~~ **No — it is inverted.** The code weights by
-  `(total_rows - n_observations) / total_rows`, the proportion of data *missing*. Corrected, the
-  overall rate moves from −0.06706 to −0.07557 and North America stops being an outlier. See
-  `.agents/context/state.md`.
+- ~~Is the regression weighting correct?~~ **For the paper, yes.** The paper's Table II and figure use
+  observation-count weights (total −0.00199/yr). The original notebook's bootstrap weighted by
+  `(total_rows - n_observations) / total_rows`, the proportion of data *missing*, which affected only
+  its own bootstrap plots (inverted vs corrected total relative change −0.06706 vs −0.07557, which are
+  not the paper's rates). See `.agents/context/state.md`.
 - ~~Where did the 35 Oceania glaciers go?~~ They never entered inference: **zero** of them have a
-  column in the areas file, and both analysis loops iterate `areas[:-1]`, which slices Oceania off
-  the end of the region list.
+  column in the areas file. No Oceania glacier is in the training set or the saved selection outputs;
+  the SQL filters remove them before inference (the `areas[:-1]` analysis slice is not the reason).
 - ~~Does the 250-per-region selection SQL exist?~~ Not as text — the original ran from the console
   and the history is not readable with the team role. **Reconstructed and verified** against the
   byte-identical Athena result from 2024-09-11; it is the `_50` query with `geog_size_rank <= 250`.
@@ -1287,7 +1344,7 @@ When sources disagree, this is the precedence order:
 **Still open** — these need Somansh Budhwar or Armin Schwartzman (`armins@ucsd.edu`):
 
 1. **Why does the paper's 0.92 Dice not reproduce?** The published checkpoint
-   (`unet_summer_model_unfrozen_100`, confirmed) scores 0.868 on a held-out slice, with batching
+   (`unet_summer_model_unfrozen_100`, confirmed) scored 0.868 on a held-out slice with the old `+1` rescale (0.906 without it), with batching
    ruled out. Most likely a different metric definition — see `docs/MODEL_MANIFEST.md`.
 3. **Is the GLAMOS comparison still current?** A commented-out passage notes Trient measured
    5.76 km² in 2006 against the model's 4.95 km² — a 14% underestimate. If that holds, it belongs in

@@ -77,24 +77,39 @@ experiments (`bl_gr_re_ni_sw_th_de_v{0,1,2}.h5`, `re_ni_sw_de_v1.h5`, …). All 
 `s3://segmentation-model-gv/checkpoints/`, with a `MANIFEST.md` recording channel counts, SHA-256s
 and the training recipe. Bucket versioning there is still disabled, so an overwrite is unrecoverable.
 
-### Published training recipe (from the paper — differs from the script defaults)
+### Training recipe: the paper's description vs the `glacierview train` defaults
+
+The Paper column is what the paper reports. The right-hand column is the current `glacierview train`
+(`trainer.TrainConfig` and `cli.py`), not the deleted 2023 `train.py`.
 
 | | Paper | `glacierview train` default |
 |---|---|---|
 | learning rate | 0.00001 | 0.00001 ✅ |
-| **batch size** | **32** | **2** ❌ |
-| encoder | unfrozen | `UNET(freeze_encoder=False)` ✅ |
-| loss | cross-entropy | `LOSS = 'ce'` ✅ |
+| batch size | 32 | 32 ✅ |
+| encoder | unfrozen | `TrainConfig.freeze_encoder = False` ✅ |
+| loss | cross-entropy | `TrainConfig.loss = "ce"` ✅ |
 | threshold | 0.5 | 0.5 ✅ |
 | optimizer | Adam | Adam ✅ |
-| splits | 6,456 train / 359 eval / 359 test of 7,174 | 90/10 only, no eval set |
-| model selection | min cross-entropy on the eval set | last epoch |
+| splits | 6,456 train / 359 eval / 359 test of 7,174 | 90/5/5: 6,453 train / 359 eval / 359 test of 7,171 (3 blank masks dropped) |
+| model selection | min cross-entropy on the eval set | epoch with lowest eval loss ✅ |
 
 Augmentation: vertical flip, horizontal flip, and 3×3 Gaussian blur (σ = 0.8), each applied
-independently with p = 0.5 — growing the training set ~75%, to 11,298 images. Reported test
-**Dice = 0.92**.
+independently with p = 0.5. The paper says this grows the training set ~75%, to 11,298 images, but
+the code augments on the fly and replaces each sample, so the set stays the same size
+(`GlacierDataset.__len__` is `len(manifest)`). Reported test **Dice = 0.92** (see the note on this
+metric below).
 
-Ablations the paper records: 3,000 images without transfer learning 0.83 → with transfer learning
+Ablations the paper records (its "Dice" figures are pixel accuracy, see below): 3,000 images without transfer learning 0.83 → with transfer learning
 0.86 → adding NDSI/NDWI 0.88 → full dataset with cross-entropy **0.92** (Dice loss gave 0.90).
 Frozen encoder 0.91 vs unfrozen 0.92. ResNet-50 beat ResNet-18 by 1–2%. Threshold sweep:
 0.1 → 0.16, 0.4 → 0.923, **0.5 → 0.926**, 0.8 → 0.87.
+
+**Updated method (2026-11-11): reading these Dice numbers.**
+- **The paper's figures are pixel accuracy.** It scored with `torchmetrics.Dice(average='micro')`,
+  which on binary masks equals pixel accuracy, so its numbers are not glacier-overlap Dice.
+- **Score on inputs as inference builds them.** That means `GlacierDataset(normalize=False)`, now the
+  default. The old `+1` rescale is what produced the 0.868.
+- **Measured on the 359-image slice:** the published model has glacier Dice **0.906** and pixel
+  accuracy 0.931. Both are upper bounds, since that slice likely overlaps training.
+- **Source and reproduction:** `docs/MODEL_MANIFEST.md`, "Updated method"; reproduce with
+  `scripts/score_checkpoint.py`.

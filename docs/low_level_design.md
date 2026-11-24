@@ -70,7 +70,7 @@ We persist the metadata provided by earth engine. Earth engine provides these me
     * ... other GLIMS IDs
 
 
-Note that earth engine may sometimes provide more than one metadata record per image (having two different cloud cover values for the same image is a common scenario that we see), so we perform deduplication, choosing one of the records arbitrarily to ensure we have one record per file name.
+Note that more than one metadata record can share a file name (having two different cloud cover values for one file name is a common scenario that we see). These are two different scenes from adjacent WRS rows on the same date, which collide because the file name has no path/row, so we perform deduplication, keeping the first record to ensure we have one record per file name.
 
 #### Self generated metadata
 

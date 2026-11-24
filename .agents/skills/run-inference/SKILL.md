@@ -33,12 +33,42 @@ uv run glacierview areas --checkpoint <path> --glims-id G007026E45991N --no-gif
 ```
 
 Writes three aggregate CSVs (raw, thresholded, binary), per-glacier CSVs under
-`glacier_areas/`, and GIFs. Aggregates are rewritten after each glacier, so a
-run that dies partway still leaves usable output.
+`glacier_areas/` (one column per variant), and GIFs. Each per-glacier CSV is
+written as soon as that glacier finishes, and the aggregates are rebuilt from
+all of them when the run ends, even on Ctrl-C. So a run that dies partway still
+leaves usable output, and `glacierview.inference.batch.write_aggregates(out_dir)`
+rebuilds the aggregates by hand.
 
 **Read the summary it prints.** Failures are logged with a traceback and
 counted, not raised — with hundreds of glaciers one bad scene should not cost
 the run. The exit code is non-zero if anything failed.
+
+## The 250-per-region set, streamed from S3
+
+The 1,024 glaciers chosen by `sql/inference_data_query_250.sql` are 68,880
+scenes / 57.5 GB, more than a laptop holds. `areas-s3` downloads a batch of
+glaciers' listed scenes, segments them, deletes them, and moves on:
+
+```bash
+uv run hf auth login     # once: the Hugging Face repo is private
+aws s3 cp --region us-west-1 <Athena result of inference_data_query_250.sql> \
+  src/glims/data/inference_samples/filtered_inference_data_250.csv
+caffeinate -i uv run glacierview --logfile areas_s3.log areas-s3 \
+  --file-list src/glims/data/inference_samples/filtered_inference_data_250.csv \
+  --checkpoint GlacierView/glacierview-unet --preprocessing published --out-dir <dir>
+```
+
+`--logfile` belongs to `glacierview` itself, so it goes before the subcommand.
+
+```
+```
+
+`scripts/run_inference_250.sh` wraps this command with its prerequisites
+documented; extra flags pass through to `areas-s3`. Try `--limit 4 --batch-size 2` first. It checks free space before each batch,
+deletes only directories it downloaded (a glacier already on disk is used and
+kept), and keeps the DEMs (89 MB in all). Rerun the same command to resume:
+glaciers with a CSV in `<dir>/glacier_areas/` are skipped, and the aggregates
+are rebuilt from all of them. No GIFs are written; use `infer` for those.
 
 ## Getting the imagery first
 
@@ -66,14 +96,15 @@ aws s3 cp s3://full-time-series-images-t1-l2-sr/G007026E45991N/ \
   --recursive --region us-west-1 --exclude "*/meta_data/*" --exclude "*.DS_Store"
 ```
 
-The whole bucket is 486 GB; the filtered inference set is 245 glaciers /
-14,952 files / 23.7 GB. Pull that subset. See `.agents/rules/data.md`.
+The whole bucket is 486 GB; the filtered inference set is 1,024 glaciers /
+68,880 files (`filtered_inference_data_250.csv`). Pull that subset. See `.agents/rules/data.md`.
 
 ## Verifying it worked
 
-Trient (`G007026E45991N`) is the documented regression case: 464 images,
-1984-04-18 to 2023-10-07, decline concentrated in 1985–1988 and 2002–2015,
-roughly stable over the last decade.
+Trient (`G007026E45991N`) is the documented regression case. The paper reports 464
+images (1984-04-18 to 2023-10-07), but the current code gives 1,748 scenes on the committed sample
+and 62 in the filtered run; 464 is reproduced only if Landsat 8 is included, so do not use it as a
+check.
 
 ## References
 
